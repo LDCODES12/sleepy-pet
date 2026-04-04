@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mochi's Room</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #1a1428;
+      color: #ede6f8;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── Room picker row ── */
+    .room-picker {
+      display: flex;
+      gap: 6px;
+      padding: 10px 14px;
+      background: rgba(0,0,0,0.3);
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .room-thumb {
+      width: 48px; height: 48px;
+      border-radius: 6px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      image-rendering: pixelated;
+      flex-shrink: 0;
+      transition: border-color 0.15s;
+    }
+    .room-thumb:hover { border-color: rgba(180,160,240,0.4); }
+    .room-thumb.active { border-color: #6C5CE7; }
+
+    /* ── Main area ── */
+    .main-area {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Palette sidebar ── */
+    .palette {
+      width: 180px;
+      background: rgba(0,0,0,0.2);
+      border-right: 1px solid rgba(255,255,255,0.08);
+      overflow-y: auto;
+      flex-shrink: 0;
+      padding: 8px;
+    }
+    .palette-cat {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: rgba(255,255,255,0.35);
+      margin: 10px 0 6px;
+    }
+    .palette-cat:first-child { margin-top: 4px; }
+    .palette-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 4px;
+    }
+    .palette-item {
+      aspect-ratio: 1;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      transition: background 0.15s;
+    }
+    .palette-item:hover { background: rgba(255,255,255,0.1); }
+    .palette-item:active { cursor: grabbing; }
+    .palette-item canvas {
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+    }
+
+    /* ── Room canvas area ── */
+    .room-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      position: relative;
+    }
+    #room-canvas {
+      image-rendering: pixelated;
+      border-radius: 8px;
+      cursor: crosshair;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    /* ── Bottom bar ── */
+    .bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: rgba(0,0,0,0.3);
+      flex-shrink: 0;
+    }
+    .mode-toggle {
+      display: flex;
+      gap: 4px;
+    }
+    .mode-btn {
+      padding: 5px 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #ede6f8;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .mode-btn:hover { background: rgba(255,255,255,0.1); }
+    .mode-btn.active { background: rgba(108,92,231,0.4); border-color: rgba(108,92,231,0.5); }
+    .hint {
+      font-size: 10px;
+      color: rgba(255,255,255,0.3);
+    }
+
+    /* Drag ghost */
+    .drag-ghost {
+      position: fixed;
+      pointer-events: none;
+      opacity: 0.7;
+      image-rendering: pixelated;
+      z-index: 999;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Room picker -->
+  <div class="room-picker" id="room-picker"></div>
+
+  <!-- Main area: palette + room canvas -->
+  <div class="main-area">
+    <div class="palette" id="palette"></div>
+    <div class="room-area" id="room-area">
+      <canvas id="room-canvas" width="512" height="512"></canvas>
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div class="bottom-bar">
+    <div class="mode-toggle">
+      <button class="mode-btn active" data-mode="edit">Edit</button>
+      <button class="mode-btn" data-mode="play">Play</button>
+    </div>
+    <span class="hint" id="hint">Drag items from palette to place them</span>
+  </div>
+
+<script>
+// ═══════ CONSTANTS ═══════
+const ROOM_COUNT = 15;
+const ROOM_BASE = 'assets/cat-room-paid/CatRoomPaid/Rooms/Room';
+const ITEM_BASE = 'assets/cat-pack-paid/CatPackPaid/CatItems/';
+const SPRITE_BASE = 'assets/cat-pack-paid/CatPackPaid/Sprites/Classical/Individual/';
+const S = 32; // sprite cell size
+
+let currentRoom = parseInt(localStorage.getItem('currentRoom') || '1');
+let mode = 'edit'; // 'edit' or 'play'
+let roomLayouts = {}; // { roomNum: [{id, x, y}, ...] }
+
+// ═══════ FURNITURE CATALOG ═══════
+const FURNITURE = [
+  // Beds (64x64)
+  { id: 'bed-blue', name: 'Blue Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedBlue.png', w: 64, h: 64, interact: 'sleep' },
+  { id: 'bed-pink', name: 'Pink Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedPink.png', w: 64, h: 64, interact: 'sleep' },
+  { id: 'bed-green', name: 'Green Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedGreen.png', w: 64, h: 64, interact: 'sleep' },
+  { id: 'bed-brown', name: 'Brown Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedBrown.png', w: 64, h: 64, interact: 'sleep' },
+  { id: 'bed-purple', name: 'Purple Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedPurple.png', w: 64, h: 64, interact: 'sleep' },
+  { id: 'bed-red', name: 'Red Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedRed.png', w: 64, h: 64, interact: 'sleep' },
+  // Food (32x32)
+  { id: 'bowl', name: 'Bowls', cat: 'Food', src: ITEM_BASE+'CatToys/CatBowls.png', w: 32, h: 32, interact: 'eat' },
+  { id: 'fish', name: 'Fish', cat: 'Food', src: ITEM_BASE+'CatToys/fish.png', w: 32, h: 32, interact: 'eat' },
+  { id: 'catfood', name: 'Cat Food', cat: 'Food', src: ITEM_BASE+'CatToys/catfood.png', w: 32, h: 32, interact: 'eat' },
+  // Toys (first frame from sheets, or full image)
+  { id: 'toy-scratch', name: 'Scratch Post', cat: 'Toys', src: ITEM_BASE+'CatToys/CatToy.png', w: 192, h: 32, cropW: 32, cropH: 32, interact: 'play' },
+  { id: 'toys-set', name: 'Toy Set', cat: 'Toys', src: ITEM_BASE+'CatToys/toyss.png', w: 128, h: 128, interact: 'play' },
+  // Furniture
+  { id: 'playground', name: 'Cat Tree', cat: 'Furniture', src: ITEM_BASE+'PlayGrounds/CatPlayGround.png', w: 128, h: 128, interact: 'play' },
+  { id: 'playground-light', name: 'Cat Tree Light', cat: 'Furniture', src: ITEM_BASE+'PlayGrounds/CatPlayGroundLighter.png', w: 128, h: 128, interact: 'play' },
+];
+
+// Preload all furniture images
+const furnitureImgs = {};
+let furnitureLoaded = 0;
+for (const f of FURNITURE) {
+  const img = new Image();
+  img.onload = img.onerror = () => {
+    furnitureImgs[f.id] = img;
+    if (++furnitureLoaded >= FURNITURE.length) onAllLoaded();
+  };
+  img.src = f.src;
+}
+
+// Room background images cache
+const roomImgs = {};
+
+// ═══════ MOCHI SPRITE ENGINE ═══════
+const ANIMS = {
+  idle:    { src: SPRITE_BASE+'Idle.png', frames: 10, speed: 150 },
+  idle2:   { src: SPRITE_BASE+'Idle2.png', frames: 10, speed: 150 },
+  sleep:   { src: SPRITE_BASE+'Sleep.png', frames: 4, speed: 350 },
+  laydown: { src: SPRITE_BASE+'LayDown.png', frames: 12, speed: 140, once: true },
+  eating:  { src: SPRITE_BASE+'Eating.png', frames: 15, speed: 120 },
+  dance:   { src: SPRITE_BASE+'Dance.png', frames: 4, speed: 180 },
+  excited: { src: SPRITE_BASE+'Excited.png', frames: 12, speed: 120 },
+  waiting: { src: SPRITE_BASE+'Waiting.png', frames: 6, speed: 200 },
+};
+const mochiImgs = {};
+let mochiLoaded = 0;
+const mochiTotal = Object.keys(ANIMS).length;
+for (const [name, a] of Object.entries(ANIMS)) {
+  const img = new Image();
+  img.onload = img.onerror = () => { mochiImgs[name] = img; mochiLoaded++; };
+  img.src = a.src;
+}
+
+let mochiAnim = 'idle', mochiFrame = 0, mochiLastT = 0, mochiAnimCb = null;
+let mochiX = 240, mochiY = 350; // position in room canvas
+let mochiTargetX = null, mochiTargetY = null;
+let mochiFlip = false;
+
+function mochiPlay(name, cb) {
+  if (!ANIMS[name]) return;
+  mochiAnim = name; mochiFrame = 0; mochiLastT = 0; mochiAnimCb = cb || null;
+}
+
+function mochiMoveTo(tx, ty, cb) {
+  mochiTargetX = tx; mochiTargetY = ty;
+  mochiFlip = tx < mochiX;
+  mochiPlay('idle2', null);
+  mochiMoveCb = cb || null;
+}
+let mochiMoveCb = null;
+
+// Load saved mochi position
+function loadMochiPos() {
+  const saved = localStorage.getItem('mochiPos_' + currentRoom);
+  if (saved) {
+    const p = JSON.parse(saved);
+    mochiX = p.x; mochiY = p.y;
+  } else {
+    mochiX = 240; mochiY = 350;
+  }
+  mochiTargetX = null; mochiTargetY = null;
+}
+
+function saveMochiPos() {
+  localStorage.setItem('mochiPos_' + currentRoom, JSON.stringify({ x: mochiX, y: mochiY }));
+}
+
+// ═══════ ROOM CANVAS ═══════
+const roomCanvas = document.getElementById('room-canvas');
+const rctx = roomCanvas.getContext('2d');
+rctx.imageSmoothingEnabled = false;
+
+let roomBgImg = null;
+
+function loadRoom(num) {
+  currentRoom = num;
+  localStorage.setItem('currentRoom', num);
+  loadMochiPos();
+  loadRoomLayout();
+
+  // Update picker highlights
+  document.querySelectorAll('.room-thumb').forEach((t, i) => t.classList.toggle('active', i + 1 === num));
+
+  // Load bg
+  if (roomImgs[num]) {
+    roomBgImg = roomImgs[num];
+  } else {
+    const img = new Image();
+    img.onload = () => { roomImgs[num] = img; roomBgImg = img; };
+    img.src = ROOM_BASE + num + '.png';
+  }
+}
+
+function loadRoomLayout() {
+  const saved = localStorage.getItem('roomLayout_' + currentRoom);
+  roomLayouts[currentRoom] = saved ? JSON.parse(saved) : [];
+}
+
+function saveRoomLayout() {
+  localStorage.setItem('roomLayout_' + currentRoom, JSON.stringify(roomLayouts[currentRoom] || []));
+}
+
+function getPlacedItems() {
+  return roomLayouts[currentRoom] || [];
+}
+
+// ═══════ RENDER LOOP ═══════
+function render(t) {
+  rctx.clearRect(0, 0, 512, 512);
+
+  // Draw room background
+  if (roomBgImg) rctx.drawImage(roomBgImg, 0, 0, 512, 512);
+
+  // Collect all drawable items (placed furniture + mochi) for z-sorting
+  const drawables = [];
+
+  for (const item of getPlacedItems()) {
+    const def = FURNITURE.find(f => f.id === item.id);
+    const img = furnitureImgs[item.id];
+    if (def && img) {
+      const drawW = def.cropW || def.w;
+      const drawH = def.cropH || def.h;
+      drawables.push({ y: item.y + drawH, draw: () => {
+        if (def.cropW) {
+          // Sprite sheet — draw first frame only
+          rctx.drawImage(img, 0, 0, def.cropW, def.cropH, item.x, item.y, def.cropW, def.cropH);
+        } else {
+          rctx.drawImage(img, item.x, item.y, drawW, drawH);
+        }
+      }});
+    }
+  }
+
+  // Mochi movement
+  if (mochiTargetX !== null && mochiTargetY !== null) {
+    const dx = mochiTargetX - mochiX;
+    const dy = mochiTargetY - mochiY;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 3) {
+      mochiX = mochiTargetX;
+      mochiY = mochiTargetY;
+      mochiTargetX = null; mochiTargetY = null;
+      saveMochiPos();
+      if (mochiMoveCb) { const cb = mochiMoveCb; mochiMoveCb = null; cb(); }
+      else mochiPlay('idle');
+    } else {
+      const speed = 2;
+      mochiX += (dx / dist) * speed;
+      mochiY += (dy / dist) * speed;
+    }
+  }
+
+  // Mochi sprite — advance frame
+  const animDef = ANIMS[mochiAnim], animImg = mochiImgs[mochiAnim];
+  if (animDef && animImg && t - mochiLastT >= animDef.speed) {
+    mochiLastT = t;
+    if (mochiFrame >= animDef.frames) {
+      if (animDef.once && mochiAnimCb) { const cb = mochiAnimCb; mochiAnimCb = null; cb(); }
+      mochiFrame = 0;
+    }
+    mochiFrame++;
+  }
+
+  // Draw Mochi (z-sorted with furniture)
+  const mFrame = Math.max(0, Math.min(mochiFrame - 1, (ANIMS[mochiAnim]?.frames || 1) - 1));
+  drawables.push({ y: mochiY + S, draw: () => {
+    rctx.save();
+    if (mochiFlip) {
+      rctx.translate(mochiX + S, mochiY);
+      rctx.scale(-1, 1);
+      if (animImg) rctx.drawImage(animImg, mFrame * S, 0, S, S, 0, 0, S, S);
+    } else {
+      if (animImg) rctx.drawImage(animImg, mFrame * S, 0, S, S, mochiX, mochiY, S, S);
+    }
+    rctx.restore();
+  }});
+
+  // Z-sort: lower y = further back
+  drawables.sort((a, b) => a.y - b.y);
+  for (const d of drawables) d.draw();
+
+  // Drag preview
+  if (dragPreview) {
+    rctx.globalAlpha = 0.5;
+    const def = FURNITURE.find(f => f.id === dragPreview.id);
+    const img = furnitureImgs[dragPreview.id];
+    if (def && img) {
+      const dw = def.cropW || def.w;
+      const dh = def.cropH || def.h;
+      if (def.cropW) {
+        rctx.drawImage(img, 0, 0, def.cropW, def.cropH, dragPreview.x - dw/2, dragPreview.y - dh/2, dw, dh);
+      } else {
+        rctx.drawImage(img, dragPreview.x - dw/2, dragPreview.y - dh/2, dw, dh);
+      }
+    }
+    rctx.globalAlpha = 1;
+  }
+
+  requestAnimationFrame(render);
+}
+
+// ═══════ ROOM PICKER ═══════
+function setupRoomPicker() {
+  const picker = document.getElementById('room-picker');
+  for (let i = 1; i <= ROOM_COUNT; i++) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 48; canvas.height = 48;
+    canvas.className = 'room-thumb' + (i === currentRoom ? ' active' : '');
+    canvas.title = 'Room ' + i;
+
+    const img = new Image();
+    const roomNum = i;
+    img.onload = () => {
+      const tc = canvas.getContext('2d');
+      tc.imageSmoothingEnabled = false;
+      tc.drawImage(img, 0, 0, 512, 512, 0, 0, 48, 48);
+      roomImgs[roomNum] = img;
+    };
+    img.src = ROOM_BASE + i + '.png';
+
+    canvas.onclick = () => loadRoom(roomNum);
+    picker.appendChild(canvas);
+  }
+}
+
+// ═══════ PALETTE ═══════
+function setupPalette() {
+  const palette = document.getElementById('palette');
+  const categories = [...new Set(FURNITURE.map(f => f.cat))];
+
+  for (const cat of categories) {
+    const label = document.createElement('div');
+    label.className = 'palette-cat';
+    label.textContent = cat;
+    palette.appendChild(label);
+
+    const grid = document.createElement('div');
+    grid.className = 'palette-grid';
+
+    const items = FURNITURE.filter(f => f.cat === cat);
+    for (const item of items) {
+      const el = document.createElement('div');
+      el.className = 'palette-item';
+      el.title = item.name;
+      el.dataset.itemId = item.id;
+
+      const thumb = document.createElement('canvas');
+      thumb.width = 48; thumb.height = 48;
+      el.appendChild(thumb);
+
+      // Draw thumbnail when image loads
+      const drawThumb = () => {
+        const img = furnitureImgs[item.id];
+        if (!img) return;
+        const tc = thumb.getContext('2d');
+        tc.imageSmoothingEnabled = false;
+        tc.clearRect(0, 0, 48, 48);
+        if (item.cropW) {
+          // Sprite sheet: draw first frame
+          const scale = Math.min(48 / item.cropW, 48 / item.cropH);
+          const dw = item.cropW * scale, dh = item.cropH * scale;
+          tc.drawImage(img, 0, 0, item.cropW, item.cropH, (48-dw)/2, (48-dh)/2, dw, dh);
+        } else {
+          const scale = Math.min(48 / item.w, 48 / item.h);
+          const dw = item.w * scale, dh = item.h * scale;
+          tc.drawImage(img, 0, 0, item.w, item.h, (48-dw)/2, (48-dh)/2, dw, dh);
+        }
+      };
+
+      if (furnitureImgs[item.id]) drawThumb();
+      else {
+        const check = setInterval(() => {
+          if (furnitureImgs[item.id]) { clearInterval(check); drawThumb(); }
+        }, 100);
+      }
+
+      // Drag start
+      el.addEventListener('mousedown', (e) => {
+        if (mode !== 'edit') return;
+        e.preventDefault();
+        startDrag(item.id, e);
+      });
+
+      grid.appendChild(el);
+    }
+    palette.appendChild(grid);
+  }
+}
+
+// ═══════ DRAG & DROP ═══════
+let dragPreview = null; // { id, x, y } in canvas coords
+let dragging = null; // { id, fromPalette: bool }
+let dragExistingIdx = -1;
+
+function canvasCoords(e) {
+  const rect = roomCanvas.getBoundingClientRect();
+  const scaleX = 512 / rect.width;
+  const scaleY = 512 / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+
+function startDrag(itemId, e) {
+  dragging = { id: itemId, fromPalette: true };
+  const pos = canvasCoords(e);
+  dragPreview = { id: itemId, x: pos.x, y: pos.y };
+}
+
+document.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  const pos = canvasCoords(e);
+  dragPreview = { id: dragging.id, x: pos.x, y: pos.y };
+});
+
+document.addEventListener('mouseup', (e) => {
+  if (!dragging) return;
+  const pos = canvasCoords(e);
+  const def = FURNITURE.find(f => f.id === dragging.id);
+
+  // Check if drop is within canvas bounds
+  if (pos.x >= 0 && pos.x <= 512 && pos.y >= 0 && pos.y <= 512 && def) {
+    const dw = def.cropW || def.w;
+    const dh = def.cropH || def.h;
+    const px = Math.round(pos.x - dw / 2);
+    const py = Math.round(pos.y - dh / 2);
+
+    if (dragExistingIdx >= 0) {
+      // Moving existing item
+      const items = getPlacedItems();
+      items[dragExistingIdx].x = px;
+      items[dragExistingIdx].y = py;
+    } else {
+      // New placement from palette
+      const items = getPlacedItems();
+      items.push({ id: dragging.id, x: px, y: py });
+      roomLayouts[currentRoom] = items;
+    }
+    saveRoomLayout();
+  }
+
+  dragging = null;
+  dragPreview = null;
+  dragExistingIdx = -1;
+});
+
+// ═══════ ROOM CANVAS INTERACTION ═══════
+roomCanvas.addEventListener('mousedown', (e) => {
+  const pos = canvasCoords(e);
+
+  if (mode === 'edit') {
+    // Check if clicking an existing placed item to drag it
+    const items = getPlacedItems();
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      const def = FURNITURE.find(f => f.id === item.id);
+      if (!def) continue;
+      const dw = def.cropW || def.w;
+      const dh = def.cropH || def.h;
+      if (pos.x >= item.x && pos.x <= item.x + dw && pos.y >= item.y && pos.y <= item.y + dh) {
+        dragging = { id: item.id, fromPalette: false };
+        dragExistingIdx = i;
+        dragPreview = { id: item.id, x: pos.x, y: pos.y };
+        e.preventDefault();
+        return;
+      }
+    }
+  } else if (mode === 'play') {
+    // Check if clicking on furniture — Mochi goes there and interacts
+    const items = getPlacedItems();
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      const def = FURNITURE.find(f => f.id === item.id);
+      if (!def) continue;
+      const dw = def.cropW || def.w;
+      const dh = def.cropH || def.h;
+      if (pos.x >= item.x && pos.x <= item.x + dw && pos.y >= item.y && pos.y <= item.y + dh) {
+        // Move Mochi to this item
+        const targetX = item.x + dw/2 - S/2;
+        const targetY = item.y + dh - S;
+        mochiMoveTo(targetX, targetY, () => {
+          if (def.interact === 'sleep') mochiPlay('laydown', () => mochiPlay('sleep'));
+          else if (def.interact === 'eat') mochiPlay('eating', () => mochiPlay('idle'));
+          else if (def.interact === 'play') mochiPlay('excited', () => mochiPlay('dance'));
+        });
+        return;
+      }
+    }
+    // Click empty floor — walk there
+    mochiMoveTo(pos.x - S/2, pos.y - S, null);
+  }
+});
+
+// Right-click to remove in edit mode
+roomCanvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (mode !== 'edit') return;
+  const pos = canvasCoords(e);
+  const items = getPlacedItems();
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    const def = FURNITURE.find(f => f.id === item.id);
+    if (!def) continue;
+    const dw = def.cropW || def.w;
+    const dh = def.cropH || def.h;
+    if (pos.x >= item.x && pos.x <= item.x + dw && pos.y >= item.y && pos.y <= item.y + dh) {
+      items.splice(i, 1);
+      saveRoomLayout();
+      return;
+    }
+  }
+});
+
+// ═══════ MODE TOGGLE ═══════
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.onclick = () => {
+    mode = btn.dataset.mode;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    const hint = document.getElementById('hint');
+    if (mode === 'edit') {
+      hint.textContent = 'Drag items from palette to place them \u2022 Right-click to remove';
+      roomCanvas.style.cursor = 'crosshair';
+    } else {
+      hint.textContent = 'Click furniture for Mochi to interact \u2022 Click floor to walk';
+      roomCanvas.style.cursor = 'pointer';
+    }
+  };
+});
+
+// ═══════ INIT ═══════
+function onAllLoaded() {
+  // furniture images ready — thumbnails will draw via interval checks
+}
+
+setupRoomPicker();
+setupPalette();
+loadRoom(currentRoom);
+loadMochiPos();
+mochiPlay('idle');
+requestAnimationFrame(render);
+</script>
+</body>
+</html>

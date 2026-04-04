@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sleepy Pet</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { background: transparent; overflow: hidden; user-select: none; font-family: -apple-system, sans-serif; }
+    body { width: 340px; height: 440px; }
+
+    /* ── Cat canvas ── */
+    #cat-canvas {
+      position: absolute;
+      bottom: 4px; right: 4px;
+      width: 64px; height: 64px;
+      image-rendering: pixelated;
+      cursor: pointer;
+      background: transparent;
+    }
+
+    /* ── Speech bubble ── */
+    .bubble {
+      position: absolute; bottom: 72px; right: 4px;
+      background: rgba(35, 28, 50, 0.92);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px; padding: 5px 10px;
+      font-size: 11px; color: #ede6f8; white-space: nowrap;
+      opacity: 0; transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .bubble.show { opacity: 1; }
+    .bubble::after {
+      content: ''; position: absolute; bottom: -5px; right: 20px;
+      border-left: 5px solid transparent; border-right: 5px solid transparent;
+      border-top: 5px solid rgba(35, 28, 50, 0.92);
+    }
+
+    /* ── Menu ── */
+    .menu {
+      position: absolute; bottom: 72px; right: 4px;
+      display: none; flex-direction: column; gap: 3px;
+    }
+    .menu.open { display: flex; }
+    .menu-btn {
+      background: rgba(35, 28, 50, 0.94);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px; padding: 7px 14px;
+      color: #ede6f8; font-size: 11px; font-weight: 600;
+      cursor: pointer; white-space: nowrap; text-align: left;
+      transition: background 0.15s;
+    }
+    .menu-btn:hover { background: rgba(108, 92, 231, 0.55); }
+
+    /* ── Panel shared ── */
+    .panel {
+      position: absolute; bottom: 72px; right: 4px;
+      background: rgba(28, 22, 48, 0.94);
+      backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px; padding: 14px;
+      color: #ede6f8; font-size: 12px;
+      display: none;
+    }
+    .panel.open { display: block; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .panel-header h3 { font-size: 13px; font-weight: 600; }
+    .panel-close {
+      background: none; border: none; color: rgba(255,255,255,0.4);
+      font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1;
+    }
+    .panel-close:hover { color: rgba(255,255,255,0.8); }
+
+    /* ── Settings ── */
+    #settings-panel { width: 200px; }
+    .lbl {
+      display: block; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.8px; color: rgba(255,255,255,0.4);
+      margin-bottom: 4px; margin-top: 10px;
+    }
+    .lbl:first-of-type { margin-top: 0; }
+    .time-input {
+      width: 100%; background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+      color: #f0eaf8; font-size: 14px; font-weight: 600;
+      padding: 6px 8px; outline: none; -webkit-appearance: none;
+    }
+    .time-input:focus { border-color: rgba(180,160,240,0.5); }
+    .time-input::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; opacity: 0.4; }
+    .sleep-info { margin-top: 12px; display: flex; align-items: center; gap: 8px; }
+    .sleep-dur { font-weight: 600; font-size: 13px; min-width: 48px; }
+    .sleep-bar { flex: 1; height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+    .sleep-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s, background 0.5s; }
+    .sleep-qual { font-size: 10px; font-weight: 500; margin-top: 4px; text-align: right; }
+    .bed-btn {
+      width: 100%; margin-top: 12px; font-size: 12px; font-weight: 600;
+      padding: 7px 0; border: none; border-radius: 10px; cursor: pointer;
+      background: linear-gradient(135deg, #6C5CE7, #8B7AEB); color: #fff;
+      box-shadow: 0 2px 8px rgba(108,92,231,0.3); transition: transform 0.15s;
+    }
+    .bed-btn:hover { transform: translateY(-1px); }
+    .bed-btn.wake { background: linear-gradient(135deg, #F0A050, #F0C060); }
+
+    /* ── Inventory ── */
+    #inv-panel { width: 220px; }
+    .inv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
+    .inv-item {
+      aspect-ratio: 1; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; background: rgba(255,255,255,0.05);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      overflow: hidden; transition: border-color 0.2s;
+    }
+    .inv-item:hover { background: rgba(255,255,255,0.1); }
+    .inv-item.sel { border-color: rgba(108,92,231,0.6); background: rgba(108,92,231,0.2); }
+    .inv-item canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+    .inv-section { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: rgba(255,255,255,0.35); margin-top: 10px; margin-bottom: 4px; }
+    .inv-section:first-child { margin-top: 0; }
+    .inv-none { font-size: 9px; color: rgba(255,255,255,0.3); font-weight: 600; }
+    .inv-preview { width: 64px; height: 64px; image-rendering: pixelated; margin: 0 auto 8px; display: block; border-radius: 8px; background: rgba(255,255,255,0.05); }
+  </style>
+</head>
+<body>
+  <!-- Cat -->
+  <canvas id="cat-canvas" width="32" height="32"></canvas>
+  <div class="bubble" id="bubble"></div>
+
+  <!-- Menu -->
+  <div class="menu" id="menu">
+    <button class="menu-btn" data-action="settings">Settings</button>
+    <button class="menu-btn" data-action="room">Visit Room</button>
+    <button class="menu-btn" data-action="inv">Inventory</button>
+    <button class="menu-btn" data-action="follow" id="follow-btn">Follow Mouse</button>
+  </div>
+
+  <!-- Settings -->
+  <div class="panel" id="settings-panel">
+    <div class="panel-header"><h3>Settings</h3><button class="panel-close" data-panel="settings-panel">&times;</button></div>
+    <span class="lbl">Bedtime</span>
+    <input type="time" class="time-input" id="bedtime" value="22:30">
+    <span class="lbl">Wake up</span>
+    <input type="time" class="time-input" id="alarm" value="07:00">
+    <div class="sleep-info">
+      <span class="sleep-dur" id="sleep-dur">8h 30m</span>
+      <div class="sleep-bar"><div class="sleep-bar-fill" id="bar-fill"></div></div>
+    </div>
+    <div class="sleep-qual" id="sleep-qual"></div>
+    <button class="bed-btn" id="bed-btn">Go to Bed</button>
+  </div>
+
+  <!-- Inventory -->
+  <div class="panel" id="inv-panel">
+    <div class="panel-header"><h3>Inventory</h3><button class="panel-close" data-panel="inv-panel">&times;</button></div>
+    <canvas class="inv-preview" id="inv-preview" width="32" height="32"></canvas>
+    <div class="inv-section">Ribbons</div>
+    <div class="inv-grid" id="ribbon-grid"></div>
+    <div class="inv-section">Skins</div>
+    <div class="inv-grid" id="skin-grid"></div>
+  </div>
+
+  <script>
+    // ═══════ MOUSE CLICK-THROUGH ═══════
+    // Window ignores mouse by default. When mouse enters visible content,
+    // we tell main process to stop ignoring so we can interact.
+    const interactiveEls = ['cat-canvas', 'menu', 'settings-panel', 'inv-panel'];
+
+    function setupClickThrough() {
+      for (const id of interactiveEls) {
+        const el = document.getElementById(id);
+        el.addEventListener('mouseenter', () => {
+          window.electronAPI?.setIgnoreMouse(false);
+        });
+        el.addEventListener('mouseleave', () => {
+          window.electronAPI?.setIgnoreMouse(true);
+        });
+      }
+    }
+
+    // ═══════ SPRITE ENGINE ═══════
+    const S = 32;
+    const canvas = document.getElementById('cat-canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const BASE = 'assets/cat-pack-paid/CatPackPaid/Sprites/Classical/Individual/';
+    const ANIMS = {
+      idle:      { src: BASE+'Idle.png', frames: 10, speed: 150 },
+      idle2:     { src: BASE+'Idle2.png', frames: 10, speed: 150 },
+      sleepy:    { src: BASE+'Sleepy.png', frames: 8, speed: 200 },
+      laydown:   { src: BASE+'LayDown.png', frames: 12, speed: 140, once: true },
+      sleep:     { src: BASE+'Sleep.png', frames: 4, speed: 350 },
+      eating:    { src: BASE+'Eating.png', frames: 15, speed: 120 },
+      dance:     { src: BASE+'Dance.png', frames: 4, speed: 180 },
+      excited:   { src: BASE+'Excited.png', frames: 12, speed: 120 },
+      sad:       { src: BASE+'Sad.png', frames: 9, speed: 180 },
+      cry:       { src: BASE+'Cry.png', frames: 4, speed: 220 },
+      surprised: { src: BASE+'Surprised.png', frames: 12, speed: 100 },
+      waiting:   { src: BASE+'Waiting.png', frames: 6, speed: 200 },
+      box:       { src: BASE+'Box1.png', frames: 4, speed: 250 },
+    };
+
+    const imgs = {};
+    let loaded = 0;
+    const total = Object.keys(ANIMS).length;
+
+    for (const [name, a] of Object.entries(ANIMS)) {
+      const img = new Image();
+      img.onload = img.onerror = () => { imgs[name] = img; if (++loaded >= total) init(); };
+      img.src = a.src;
+    }
+
+    let curAnim = 'idle', frame = 0, lastT = 0, animCb = null;
+
+    // Atlas rendering: ribbons are 512x512 (16 cols x 16 rows of 32px cells)
+    // Skins are 512x640 (16 cols x 20 rows of 32px cells)
+    // Animation rows map: each anim name → row index in atlas
+    const ATLAS_ANIM_ROWS = {
+      idle: 0, idle2: 1, sleepy: 2, laydown: 3, sleep: 4,
+      eating: 5, dance: 6, excited: 7, sad: 8, cry: 9,
+      surprised: 10, waiting: 11, box: 12
+    };
+    const ATLAS_COLS = 16;
+
+    let selectedRibbon = localStorage.getItem('selectedRibbon') || null;
+    let selectedSkin = localStorage.getItem('selectedSkin') || null;
+    let ribbonAtlasImg = null, skinAtlasImg = null;
+
+    function loadAtlas(type, file) {
+      if (type === 'ribbon') {
+        if (!file) { ribbonAtlasImg = null; selectedRibbon = null; localStorage.removeItem('selectedRibbon'); updateInvPreview(); return; }
+        selectedRibbon = file;
+        localStorage.setItem('selectedRibbon', file);
+        const img = new Image();
+        img.onload = () => { ribbonAtlasImg = img; updateInvPreview(); };
+        img.src = 'assets/cat-pack-paid/CatPackPaid/Sprites/CatwithRibbon/CatPackRibbon' + file + '.png';
+      } else {
+        if (!file) { skinAtlasImg = null; selectedSkin = null; localStorage.removeItem('selectedSkin'); updateInvPreview(); return; }
+        selectedSkin = file;
+        localStorage.setItem('selectedSkin', file);
+        const img = new Image();
+        img.onload = () => { skinAtlasImg = img; updateInvPreview(); };
+        img.src = 'assets/cat-pack-paid/CatPackPaid/CatPackDifferentSkins/' + file;
+      }
+    }
+
+    function tick(t) {
+      const a = ANIMS[curAnim], img = imgs[curAnim];
+      if (a && img && t - lastT >= a.speed) {
+        lastT = t;
+        if (frame >= a.frames) {
+          if (a.once && animCb) { const cb = animCb; animCb = null; cb(); requestAnimationFrame(tick); return; }
+          frame = 0;
+        }
+        ctx.clearRect(0, 0, S, S);
+
+        // Use atlas if ribbon or skin selected, otherwise individual strip
+        const atlasImg = ribbonAtlasImg || skinAtlasImg;
+        const row = ATLAS_ANIM_ROWS[curAnim];
+        if (atlasImg && row !== undefined) {
+          const col = Math.min(frame, ATLAS_COLS - 1);
+          ctx.drawImage(atlasImg, col * S, row * S, S, S, 0, 0, S, S);
+        } else {
+          ctx.drawImage(img, frame * S, 0, S, S, 0, 0, S, S);
+        }
+        frame++;
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function play(name, cb) {
+      if (!ANIMS[name]) return;
+      curAnim = name; frame = 0; lastT = 0; animCb = cb || null;
+    }
+
+    // ═══════ STATE ═══════
+    let bedtime = localStorage.getItem('bedtime') || '22:30';
+    let alarmTime = localStorage.getItem('alarm') || '07:00';
+    let state = 'awake', manualSleep = false;
+
+    const msgs = {
+      awake: ['Feeling great!', "Let's play!", 'Meow!', 'What a day!'],
+      drowsy: ['*yawn*...', 'Getting sleepy...', 'Bed soon?'],
+      sleepy: ['So tired...', 'Please... bed...', "Can't stay up..."],
+      sleeping: [], waking: ['Good morning!']
+    };
+
+    function minsTo(ts) {
+      const [h, m] = ts.split(':').map(Number);
+      const now = new Date(), t = new Date();
+      t.setHours(h, m, 0, 0);
+      if (t <= now) t.setDate(t.getDate() + 1);
+      return (t - now) / 60000;
+    }
+
+    function setState(s) {
+      state = s;
+      switch (s) {
+        case 'awake': play(Math.random() > 0.5 ? 'idle' : 'idle2'); break;
+        case 'drowsy': play('waiting'); break;
+        case 'sleepy':
+          play('sleepy');
+          window.electronAPI?.notify('Sleepy Pet', 'Mochi is really sleepy! Time for bed!');
+          break;
+        case 'sleeping': play('laydown', () => play('sleep')); break;
+        case 'waking': play('excited', () => setState('awake')); break;
+      }
+      const btn = document.getElementById('bed-btn');
+      btn.textContent = s === 'sleeping' ? 'Wake Up' : 'Go to Bed';
+      btn.classList.toggle('wake', s === 'sleeping');
+      showBubble();
+    }
+
+    function checkState() {
+      if (manualSleep) return;
+      const mins = minsTo(bedtime);
+      const s = mins <= 15 ? 'sleepy' : mins <= 60 ? 'drowsy' : 'awake';
+      if (s !== state) setState(s);
+    }
+
+    // ═══════ UI ═══════
+    let menuOpen = false, activePanel = null, bubbleTimer;
+    let followingMouse = localStorage.getItem('followMouse') === 'true';
+
+    function showBubble() {
+      if (menuOpen || activePanel) return;
+      const m = msgs[state];
+      if (!m?.length) { document.getElementById('bubble').classList.remove('show'); return; }
+      const b = document.getElementById('bubble');
+      b.textContent = m[Math.floor(Math.random() * m.length)];
+      b.classList.add('show');
+      clearTimeout(bubbleTimer);
+      bubbleTimer = setTimeout(() => b.classList.remove('show'), 4000);
+    }
+
+    function toggleMenu() {
+      if (activePanel) { closePanel(); return; }
+      menuOpen = !menuOpen;
+      document.getElementById('menu').classList.toggle('open', menuOpen);
+      document.getElementById('bubble').classList.remove('show');
+    }
+
+    function openPanel(id) {
+      menuOpen = false;
+      document.getElementById('menu').classList.remove('open');
+      if (activePanel) document.getElementById(activePanel).classList.remove('open');
+      activePanel = id;
+      document.getElementById(id).classList.add('open');
+    }
+
+    function closePanel() {
+      if (activePanel) document.getElementById(activePanel).classList.remove('open');
+      activePanel = null;
+    }
+
+    function updateSleepInfo() {
+      const [bH, bM] = bedtime.split(':').map(Number);
+      const [aH, aM] = alarmTime.split(':').map(Number);
+      let bed = bH * 60 + bM, alm = aH * 60 + aM;
+      if (alm <= bed) alm += 1440;
+      const t = alm - bed, h = Math.floor(t / 60), m = t % 60;
+      document.getElementById('sleep-dur').textContent = h + 'h ' + m + 'm';
+      document.getElementById('bar-fill').style.width = Math.min((t / 480) * 100, 100) + '%';
+      let color, text;
+      if (t < 360) { color = '#FF6B6B'; text = 'Too little'; }
+      else if (t < 420) { color = '#FFA76B'; text = 'Need more'; }
+      else if (t < 480) { color = '#FFD96B'; text = 'Almost'; }
+      else if (t <= 540) { color = '#6BFFB8'; text = 'Perfect'; }
+      else { color = '#6BB8FF'; text = 'A lot'; }
+      document.getElementById('bar-fill').style.background = color;
+      const q = document.getElementById('sleep-qual');
+      q.textContent = text; q.style.color = color;
+    }
+
+    // Inventory — canvas-based previews from atlas first frame
+    const RIBBON_COLORS = ['Blue', 'Brown', 'Green', 'Pink', 'Purple', 'Red', 'White', 'Yellow'];
+    const RIBBON_BASE = 'assets/cat-pack-paid/CatPackPaid/Sprites/CatwithRibbon/CatPackRibbon';
+    const SKIN_BASE = 'assets/cat-pack-paid/CatPackPaid/CatPackDifferentSkins/';
+    const SKINS = [
+      { name: 'Classic', file: null },
+      { name: 'Orange', file: 'OrangeCat.png' },
+      { name: 'Grey', file: 'Grey.png' },
+      { name: 'White', file: 'WhiteCat.png' },
+    ];
+
+    function drawAtlasThumb(canvas, atlasImg) {
+      // Draw the first idle frame (0,0,32,32) from the atlas
+      const tctx = canvas.getContext('2d');
+      tctx.imageSmoothingEnabled = false;
+      tctx.clearRect(0, 0, 32, 32);
+      tctx.drawImage(atlasImg, 0, 0, S, S, 0, 0, 32, 32);
+    }
+
+    function updateInvPreview() {
+      const pc = document.getElementById('inv-preview');
+      const pctx = pc.getContext('2d');
+      pctx.imageSmoothingEnabled = false;
+      pctx.clearRect(0, 0, 32, 32);
+      // Show current look: atlas if selected, else classic idle first frame
+      const atlasImg = ribbonAtlasImg || skinAtlasImg;
+      if (atlasImg) {
+        pctx.drawImage(atlasImg, 0, 0, S, S, 0, 0, 32, 32);
+      } else if (imgs.idle) {
+        pctx.drawImage(imgs.idle, 0, 0, S, S, 0, 0, 32, 32);
+      }
+    }
+
+    function setupInventory() {
+      const rg = document.getElementById('ribbon-grid');
+
+      // None option for ribbons
+      const rNone = document.createElement('div');
+      rNone.className = 'inv-item' + (!selectedRibbon ? ' sel' : '');
+      rNone.innerHTML = '<span class="inv-none">None</span>';
+      rNone.onclick = () => {
+        document.querySelectorAll('#ribbon-grid .inv-item').forEach(e => e.classList.remove('sel'));
+        rNone.classList.add('sel');
+        loadAtlas('ribbon', null);
+      };
+      rg.appendChild(rNone);
+
+      for (const color of RIBBON_COLORS) {
+        const item = document.createElement('div');
+        item.className = 'inv-item' + (selectedRibbon === color ? ' sel' : '');
+        const thumb = document.createElement('canvas');
+        thumb.width = 32; thumb.height = 32;
+        item.appendChild(thumb);
+
+        // Load atlas image to extract first frame for thumbnail
+        const atlasPath = RIBBON_BASE + color + '.png';
+        const atlasImg = new Image();
+        atlasImg.onload = () => drawAtlasThumb(thumb, atlasImg);
+        atlasImg.src = atlasPath;
+
+        item.onclick = () => {
+          document.querySelectorAll('#ribbon-grid .inv-item').forEach(e => e.classList.remove('sel'));
+          item.classList.add('sel');
+          loadAtlas('ribbon', color);
+        };
+        rg.appendChild(item);
+      }
+
+      // Skins
+      const sg = document.getElementById('skin-grid');
+      for (const skin of SKINS) {
+        const item = document.createElement('div');
+        const isSel = skin.file ? selectedSkin === skin.file : !selectedSkin;
+        item.className = 'inv-item' + (isSel ? ' sel' : '');
+
+        if (skin.file) {
+          const thumb = document.createElement('canvas');
+          thumb.width = 32; thumb.height = 32;
+          item.appendChild(thumb);
+          const atlasImg = new Image();
+          atlasImg.onload = () => drawAtlasThumb(thumb, atlasImg);
+          atlasImg.src = SKIN_BASE + skin.file;
+        } else {
+          // Classic — show first frame from normal idle strip
+          const thumb = document.createElement('canvas');
+          thumb.width = 32; thumb.height = 32;
+          item.appendChild(thumb);
+          // Draw when idle image is loaded
+          const drawClassic = () => {
+            if (imgs.idle) drawAtlasThumb(thumb, imgs.idle);
+          };
+          if (imgs.idle) drawClassic();
+          else setTimeout(drawClassic, 500);
+        }
+
+        item.onclick = () => {
+          document.querySelectorAll('#skin-grid .inv-item').forEach(e => e.classList.remove('sel'));
+          item.classList.add('sel');
+          loadAtlas('skin', skin.file);
+        };
+        sg.appendChild(item);
+      }
+
+      // Load saved selections
+      if (selectedRibbon) loadAtlas('ribbon', selectedRibbon);
+      else if (selectedSkin) loadAtlas('skin', selectedSkin);
+    }
+
+    // ═══════ INIT ═══════
+    function init() {
+      setupClickThrough();
+
+      document.getElementById('bedtime').value = bedtime;
+      document.getElementById('alarm').value = alarmTime;
+      document.getElementById('bedtime').onchange = e => {
+        bedtime = e.target.value; localStorage.setItem('bedtime', bedtime);
+        updateSleepInfo(); if (!manualSleep) checkState();
+      };
+      document.getElementById('alarm').onchange = e => {
+        alarmTime = e.target.value; localStorage.setItem('alarm', alarmTime);
+        updateSleepInfo();
+      };
+      document.getElementById('bed-btn').onclick = () => {
+        if (state === 'sleeping') { manualSleep = false; setState('waking'); }
+        else { manualSleep = true; setState('sleeping'); }
+      };
+
+      // Cat click
+      canvas.addEventListener('click', toggleMenu);
+
+      // Menu buttons
+      document.querySelectorAll('.menu-btn').forEach(btn => {
+        btn.onclick = () => {
+          const action = btn.dataset.action;
+          if (action === 'room') {
+            menuOpen = false;
+            document.getElementById('menu').classList.remove('open');
+            window.electronAPI?.openRoom();
+          } else if (action === 'follow') {
+            menuOpen = false;
+            document.getElementById('menu').classList.remove('open');
+            followingMouse = !followingMouse;
+            localStorage.setItem('followMouse', followingMouse);
+            btn.textContent = followingMouse ? 'Stop Following' : 'Follow Mouse';
+            window.electronAPI?.toggleFollow(followingMouse);
+          } else {
+            openPanel(action + '-panel');
+          }
+        };
+      });
+
+      // Close buttons
+      document.querySelectorAll('.panel-close').forEach(btn => {
+        btn.onclick = () => closePanel();
+      });
+
+      setupInventory();
+      updateSleepInfo();
+      updateInvPreview();
+
+      // Restore follow-mouse state
+      if (followingMouse) {
+        document.getElementById('follow-btn').textContent = 'Stop Following';
+        window.electronAPI?.toggleFollow(true);
+      }
+
+      setState('awake');
+      requestAnimationFrame(tick);
+
+      setInterval(showBubble, 10000);
+      setInterval(checkState, 30000);
+    }
+  </script>
+</body>
+</html>
