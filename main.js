@@ -5,6 +5,7 @@ const path = require('path');
 let mainWindow;
 let roomWindow;
 let tray;
+let mochiHidden = false;
 
 // Window large enough for room view (340x440) but starts showing only the cat
 const WIN_W = 340;
@@ -85,7 +86,10 @@ function createTrayIcon() {
 
 function updateTrayMenu() {
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Show Mochi', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+    { label: mochiHidden ? 'Show Mochi' : 'Hide Mochi', click: () => {
+      if (mochiHidden) { showMochi(); }
+      else { hideMochi(); }
+    }},
     { label: followMouse ? 'Stop Following' : 'Follow Mouse', click: () => {
       followMouse = !followMouse;
       if (followMouse) startFollowMouse(); else { stopFollowMouse(); resetPosition(); }
@@ -102,7 +106,27 @@ function createTray() {
   tray = new Tray(createTrayIcon());
   tray.setToolTip('Sleepy Pet');
   updateTrayMenu();
-  tray.on('click', () => { mainWindow?.show(); mainWindow?.focus(); });
+  tray.on('click', () => { if (mochiHidden) showMochi(); });
+}
+
+function hideMochi() {
+  if (!mainWindow) return;
+  mochiHidden = true;
+  // Tell renderer to stop drawing — canvas clears to transparent, window becomes invisible
+  mainWindow.webContents.send('mochi-visible', false);
+  // Fully ignore mouse (no forward) — OS treats window as non-existent for clicks
+  mainWindow.setIgnoreMouseEvents(true);
+  updateTrayMenu();
+}
+
+function showMochi() {
+  if (!mainWindow) return;
+  mochiHidden = false;
+  // Tell renderer to resume drawing
+  mainWindow.webContents.send('mochi-visible', true);
+  // Re-enable click-through with forward so renderer can detect mouse on content
+  mainWindow.setIgnoreMouseEvents(true, { forward: true });
+  updateTrayMenu();
 }
 
 function resetPosition() {
@@ -140,18 +164,21 @@ function startFollowMouse() {
     if (!mainWindow || !followMouse) return;
     const cursor = screen.getCursorScreenPoint();
     const [wx, wy] = mainWindow.getPosition();
-    // Lerp toward cursor — offset so the cat's face/eyes track the cursor
-    // Cat canvas: bottom:4, right:4, 64x64 → eyes ~20px down from sprite top
-    const targetX = cursor.x - WIN_W + 48;
+    // Cat sprite: bottom:4 right:4, 64x64 in a 340x440 window
+    // Face is on the LEFT side by default; flipped = face on RIGHT
+    const catCenterX = wx + WIN_W - 36; // center of 64px sprite
+    const facingLeft = cursor.x < catCenterX;
+    // Offset so cursor lands a little in front of the face
+    const targetX = facingLeft
+      ? cursor.x - WIN_W + 72   // face is on left → push window right so face meets cursor
+      : cursor.x - WIN_W + 4;   // face is on right → pull window left so face meets cursor
     const targetY = cursor.y - WIN_H + 48;
     const newX = Math.round(wx + (targetX - wx) * 0.08);
     const newY = Math.round(wy + (targetY - wy) * 0.08);
     if (newX !== wx || newY !== wy) {
       mainWindow.setPosition(newX, newY);
     }
-    // Tell renderer which direction the cursor is relative to the cat's eyes
-    const catEyesX = wx + WIN_W - 48;
-    mainWindow.webContents.send('cursor-dir', cursor.x < catEyesX ? 'left' : 'right');
+    mainWindow.webContents.send('cursor-dir', facingLeft ? 'left' : 'right');
   }, 16);
 }
 
@@ -181,6 +208,7 @@ ipcMain.on('toggle-follow', (_, enabled) => {
 
 ipcMain.on('open-room', () => createRoomWindow());
 ipcMain.on('quit-app', () => app.quit());
+ipcMain.on('hide-mochi', () => hideMochi());
 ipcMain.on('notify', (_, { title, body }) => {
   if (Notification.isSupported()) new Notification({ title, body, silent: false }).show();
 });
