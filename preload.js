@@ -5,5 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notify: (title, body) => ipcRenderer.send('notify', { title, body }),
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
   openRoom: () => ipcRenderer.send('open-room'),
-  toggleFollow: (enabled) => ipcRenderer.send('toggle-follow', enabled)
+  toggleFollow: (enabled) => ipcRenderer.send('toggle-follow', enabled),
+  onStopFollow: (cb) => ipcRenderer.on('stop-follow', cb),
+  onCursorDir: (cb) => ipcRenderer.on('cursor-dir', (_, dir) => cb(dir))
 });

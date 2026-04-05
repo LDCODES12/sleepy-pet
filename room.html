@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Mochi's Room</title>
+  <title>Mochi's Room Editor</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -20,10 +20,15 @@
     .room-picker {
       display: flex;
       gap: 6px;
-      padding: 10px 14px;
+      padding: 8px 12px;
       background: rgba(0,0,0,0.3);
       overflow-x: auto;
       flex-shrink: 0;
+      align-items: center;
+    }
+    .room-picker-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+      color: rgba(255,255,255,0.3); margin-right: 4px; flex-shrink: 0;
     }
     .room-thumb {
       width: 48px; height: 48px;
@@ -38,52 +43,56 @@
     .room-thumb.active { border-color: #6C5CE7; }
 
     /* ── Main area ── */
-    .main-area {
-      display: flex;
-      flex: 1;
-      min-height: 0;
-    }
+    .main-area { display: flex; flex: 1; min-height: 0; }
 
     /* ── Palette sidebar ── */
     .palette {
-      width: 180px;
+      width: 240px;
       background: rgba(0,0,0,0.2);
       border-right: 1px solid rgba(255,255,255,0.08);
       overflow-y: auto;
       flex-shrink: 0;
-      padding: 8px;
+      padding: 8px 10px;
     }
-    .palette-cat {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: rgba(255,255,255,0.35);
-      margin: 10px 0 6px;
+    .palette::-webkit-scrollbar { width: 6px; }
+    .palette::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    .pal-cat {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+      color: rgba(255,255,255,0.35); margin: 12px 0 6px; cursor: pointer;
     }
-    .palette-cat:first-child { margin-top: 4px; }
-    .palette-grid {
+    .pal-cat:first-child { margin-top: 4px; }
+    .pal-cat::before { content: '▸ '; font-size: 8px; }
+    .pal-cat.open::before { content: '▾ '; }
+    .pal-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 4px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
     }
-    .palette-item {
+    .pal-grid.hidden { display: none; }
+    .pal-item {
       aspect-ratio: 1;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
       border-radius: 6px;
       cursor: grab;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 4px;
-      transition: background 0.15s;
+      transition: background 0.15s, border-color 0.15s;
+      position: relative;
     }
-    .palette-item:hover { background: rgba(255,255,255,0.1); }
-    .palette-item:active { cursor: grabbing; }
-    .palette-item canvas {
-      width: 100%;
-      height: 100%;
+    .pal-item:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.15); }
+    .pal-item:active { cursor: grabbing; }
+    .pal-item canvas {
+      width: 100%; height: 100%;
       image-rendering: pixelated;
+    }
+    .pal-item-label {
+      position: absolute; bottom: 1px; left: 0; right: 0;
+      font-size: 7px; text-align: center; color: rgba(255,255,255,0.4);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      padding: 0 2px;
     }
 
     /* ── Room canvas area ── */
@@ -92,7 +101,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 16px;
+      padding: 12px;
       position: relative;
     }
     #room-canvas {
@@ -112,290 +121,505 @@
       background: rgba(0,0,0,0.3);
       flex-shrink: 0;
     }
-    .mode-toggle {
-      display: flex;
-      gap: 4px;
-    }
+    .mode-toggle { display: flex; gap: 4px; }
     .mode-btn {
       padding: 5px 14px;
       border: 1px solid rgba(255,255,255,0.12);
       border-radius: 8px;
       background: rgba(255,255,255,0.05);
-      color: #ede6f8;
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s;
+      color: #ede6f8; font-size: 11px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
     }
     .mode-btn:hover { background: rgba(255,255,255,0.1); }
     .mode-btn.active { background: rgba(108,92,231,0.4); border-color: rgba(108,92,231,0.5); }
-    .hint {
-      font-size: 10px;
-      color: rgba(255,255,255,0.3);
-    }
+    .hint { font-size: 10px; color: rgba(255,255,255,0.3); }
 
-    /* Drag ghost */
+    /* ── Drag ghost ── */
     .drag-ghost {
-      position: fixed;
-      pointer-events: none;
-      opacity: 0.7;
-      image-rendering: pixelated;
-      z-index: 999;
+      position: fixed; pointer-events: none; z-index: 999;
+      image-rendering: pixelated; opacity: 0.75;
     }
   </style>
 </head>
 <body>
 
-  <!-- Room picker -->
-  <div class="room-picker" id="room-picker"></div>
+  <div class="room-picker" id="room-picker">
+    <span class="room-picker-label">Rooms</span>
+  </div>
 
-  <!-- Main area: palette + room canvas -->
   <div class="main-area">
     <div class="palette" id="palette"></div>
-    <div class="room-area" id="room-area">
+    <div class="room-area">
       <canvas id="room-canvas" width="512" height="512"></canvas>
     </div>
   </div>
 
-  <!-- Bottom bar -->
   <div class="bottom-bar">
     <div class="mode-toggle">
       <button class="mode-btn active" data-mode="edit">Edit</button>
       <button class="mode-btn" data-mode="play">Play</button>
     </div>
-    <span class="hint" id="hint">Drag items from palette to place them</span>
+    <span class="hint" id="hint">Drag items from palette · Right-click placed items to remove</span>
   </div>
 
 <script>
-// ═══════ CONSTANTS ═══════
+// ═══════ PATHS ═══════
 const ROOM_COUNT = 15;
 const ROOM_BASE = 'assets/cat-room-paid/CatRoomPaid/Rooms/Room';
-const ITEM_BASE = 'assets/cat-pack-paid/CatPackPaid/CatItems/';
-const SPRITE_BASE = 'assets/cat-pack-paid/CatPackPaid/Sprites/Classical/Individual/';
-const S = 32; // sprite cell size
+const ITEMS = 'assets/cat-pack-paid/CatPackPaid/CatItems/';
+const DECOS = 'assets/cat-pack-paid/CatPackPaid/CatItems/Decorations/Individual/';
+const SPRITES = 'assets/cat-pack-paid/CatPackPaid/Sprites/Classical/Individual/';
+const S = 32;
 
 let currentRoom = parseInt(localStorage.getItem('currentRoom') || '1');
-let mode = 'edit'; // 'edit' or 'play'
-let roomLayouts = {}; // { roomNum: [{id, x, y}, ...] }
+let mode = 'edit';
+let roomLayouts = {};
 
-// ═══════ FURNITURE CATALOG ═══════
-const FURNITURE = [
-  // Beds (64x64)
-  { id: 'bed-blue', name: 'Blue Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedBlue.png', w: 64, h: 64, interact: 'sleep' },
-  { id: 'bed-pink', name: 'Pink Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedPink.png', w: 64, h: 64, interact: 'sleep' },
-  { id: 'bed-green', name: 'Green Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedGreen.png', w: 64, h: 64, interact: 'sleep' },
-  { id: 'bed-brown', name: 'Brown Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedBrown.png', w: 64, h: 64, interact: 'sleep' },
-  { id: 'bed-purple', name: 'Purple Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedPurple.png', w: 64, h: 64, interact: 'sleep' },
-  { id: 'bed-red', name: 'Red Bed', cat: 'Beds', src: ITEM_BASE+'Beds/CatBedRed.png', w: 64, h: 64, interact: 'sleep' },
-  // Food (32x32)
-  { id: 'bowl', name: 'Bowls', cat: 'Food', src: ITEM_BASE+'CatToys/CatBowls.png', w: 32, h: 32, interact: 'eat' },
-  { id: 'fish', name: 'Fish', cat: 'Food', src: ITEM_BASE+'CatToys/fish.png', w: 32, h: 32, interact: 'eat' },
-  { id: 'catfood', name: 'Cat Food', cat: 'Food', src: ITEM_BASE+'CatToys/catfood.png', w: 32, h: 32, interact: 'eat' },
-  // Toys (first frame from sheets, or full image)
-  { id: 'toy-scratch', name: 'Scratch Post', cat: 'Toys', src: ITEM_BASE+'CatToys/CatToy.png', w: 192, h: 32, cropW: 32, cropH: 32, interact: 'play' },
-  { id: 'toys-set', name: 'Toy Set', cat: 'Toys', src: ITEM_BASE+'CatToys/toyss.png', w: 128, h: 128, interact: 'play' },
-  // Furniture
-  { id: 'playground', name: 'Cat Tree', cat: 'Furniture', src: ITEM_BASE+'PlayGrounds/CatPlayGround.png', w: 128, h: 128, interact: 'play' },
-  { id: 'playground-light', name: 'Cat Tree Light', cat: 'Furniture', src: ITEM_BASE+'PlayGrounds/CatPlayGroundLighter.png', w: 128, h: 128, interact: 'play' },
+// ═══════ ITEM CATALOG ═══════
+// Each item: { id, name, cat, src, w, h, cropX?, cropY?, cropW?, cropH?, interact? }
+const CATALOG = [
+  // ── Beds (individual files, 64x64) ──
+  { id: 'bed-blue',   name: 'Blue Bed',   cat: 'Beds', src: ITEMS+'Beds/CatBedBlue.png',   w:64, h:64, interact:'sleep' },
+  { id: 'bed-pink',   name: 'Pink Bed',   cat: 'Beds', src: ITEMS+'Beds/CatBedPink.png',   w:64, h:64, interact:'sleep' },
+  { id: 'bed-green',  name: 'Green Bed',  cat: 'Beds', src: ITEMS+'Beds/CatBedGreen.png',  w:64, h:64, interact:'sleep' },
+  { id: 'bed-brown',  name: 'Brown Bed',  cat: 'Beds', src: ITEMS+'Beds/CatBedBrown.png',  w:64, h:64, interact:'sleep' },
+  { id: 'bed-purple', name: 'Purple Bed', cat: 'Beds', src: ITEMS+'Beds/CatBedPurple.png', w:64, h:64, interact:'sleep' },
+  { id: 'bed-red',    name: 'Red Bed',    cat: 'Beds', src: ITEMS+'Beds/CatBedRed.png',    w:64, h:64, interact:'sleep' },
+
+  // ── Cat Homes (126x126 sheet, 2x2 grid = 4 houses at 63x63) ──
+  { id: 'home-blue',  name: 'Blue House',  cat: 'Furniture', src: ITEMS+'Beds/CatHomes.png', w:126, h:126, cropX:0,  cropY:0,  cropW:63, cropH:63, interact:'sleep' },
+  { id: 'home-green', name: 'Green House', cat: 'Furniture', src: ITEMS+'Beds/CatHomes.png', w:126, h:126, cropX:63, cropY:0,  cropW:63, cropH:63, interact:'sleep' },
+  { id: 'home-purple',name: 'Purple House',cat: 'Furniture', src: ITEMS+'Beds/CatHomes.png', w:126, h:126, cropX:0,  cropY:63, cropW:63, cropH:63, interact:'sleep' },
+  { id: 'home-brown', name: 'Brown House', cat: 'Furniture', src: ITEMS+'Beds/CatHomes.png', w:126, h:126, cropX:63, cropY:63, cropW:63, cropH:63, interact:'sleep' },
+
+  // ── Food (CatBowls 32x32 = 2x2 grid of 16x16 bowls) ──
+  { id: 'bowl-green',  name: 'Green Bowl',  cat: 'Food', src: ITEMS+'CatToys/CatBowls.png', w:32, h:32, cropX:0,  cropY:0,  cropW:16, cropH:16, interact:'eat' },
+  { id: 'bowl-purple', name: 'Purple Bowl', cat: 'Food', src: ITEMS+'CatToys/CatBowls.png', w:32, h:32, cropX:16, cropY:0,  cropW:16, cropH:16, interact:'eat' },
+  { id: 'bowl-blue',   name: 'Blue Bowl',   cat: 'Food', src: ITEMS+'CatToys/CatBowls.png', w:32, h:32, cropX:0,  cropY:16, cropW:16, cropH:16, interact:'eat' },
+  { id: 'bowl-brown',  name: 'Brown Bowl',  cat: 'Food', src: ITEMS+'CatToys/CatBowls.png', w:32, h:32, cropX:16, cropY:16, cropW:16, cropH:16, interact:'eat' },
+  // Fish (32x32 = 2x2 grid of 16x16)
+  { id: 'fish-green',  name: 'Green Fish',  cat: 'Food', src: ITEMS+'CatToys/fish.png', w:32, h:32, cropX:0,  cropY:0,  cropW:16, cropH:16, interact:'eat' },
+  { id: 'fish-blue',   name: 'Blue Fish',   cat: 'Food', src: ITEMS+'CatToys/fish.png', w:32, h:32, cropX:16, cropY:0,  cropW:16, cropH:16, interact:'eat' },
+  { id: 'fish-teal',   name: 'Teal Fish',   cat: 'Food', src: ITEMS+'CatToys/fish.png', w:32, h:32, cropX:0,  cropY:16, cropW:16, cropH:16, interact:'eat' },
+  { id: 'fish-gold',   name: 'Gold Fish',   cat: 'Food', src: ITEMS+'CatToys/fish.png', w:32, h:32, cropX:16, cropY:16, cropW:16, cropH:16, interact:'eat' },
+  // Cat Food bag (single item, fine as-is)
+  { id: 'catfood', name: 'Cat Food', cat: 'Food', src: ITEMS+'CatToys/catfood.png', w:32, h:32, interact:'eat' },
+
+  // ── Toys (scratch posts from toyss.png 128x128, 2x2 = 4 at 64x64) ──
+  { id: 'scratch-1', name: 'Scratch Post 1', cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:0,  cropY:0,  cropW:64, cropH:64, interact:'play' },
+  { id: 'scratch-2', name: 'Scratch Post 2', cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:64, cropY:0,  cropW:64, cropH:64, interact:'play' },
+  { id: 'scratch-3', name: 'Scratch Post 3', cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:0,  cropY:64, cropW:64, cropH:64, interact:'play' },
+  { id: 'scratch-4', name: 'Scratch Post 4', cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:64, cropY:64, cropW:64, cropH:64, interact:'play' },
+
+  // ── Toy animations (first frame only) ──
+  { id: 'toy-cat',   name: 'Cat Toy',   cat: 'Toys', src: ITEMS+'CatToys/CatToy.png',        w:192, h:32,  cropX:0, cropY:0, cropW:32, cropH:32, interact:'play' },
+  { id: 'toy-mouse', name: 'Mouse',     cat: 'Toys', src: ITEMS+'CatToys/Mouse-Sheet.png',    w:158, h:32,  cropX:0, cropY:0, cropW:32, cropH:32, interact:'play' },
+  { id: 'ball-blue', name: 'Blue Ball', cat: 'Toys', src: ITEMS+'CatToys/BlueBall-Sheet.png',  w:120, h:16,  cropX:0, cropY:0, cropW:16, cropH:16, interact:'play' },
+  { id: 'ball-orange',name:'Orange Ball',cat: 'Toys', src: ITEMS+'CatToys/OrangeBall-Sheet.png',w:120, h:16,  cropX:0, cropY:0, cropW:16, cropH:16, interact:'play' },
+  { id: 'ball-pink', name: 'Pink Ball', cat: 'Toys', src: ITEMS+'CatToys/PinkBall-Sheet.png',  w:120, h:16,  cropX:0, cropY:0, cropW:16, cropH:16, interact:'play' },
+
+  // ── Cat Trees / Playgrounds ──
+  { id: 'playground',      name: 'Cat Tree',       cat: 'Cat Trees', src: ITEMS+'PlayGrounds/CatPlayGround.png',        w:128, h:128, interact:'play' },
+  { id: 'playground-light', name: 'Cat Tree Light', cat: 'Cat Trees', src: ITEMS+'PlayGrounds/CatPlayGroundLighter.png', w:128, h:128, interact:'play' },
+
+  // ── Decorations ──
+  // Wall Art
+  { id:'deco_000', name:'Blue Painting',   cat:'Wall Art', src:DECOS+'deco_000.png', w:61, h:95 },
+  { id:'deco_001', name:'Brown Painting',  cat:'Wall Art', src:DECOS+'deco_001.png', w:61, h:95 },
+  { id:'deco_018', name:'Green Painting',  cat:'Wall Art', src:DECOS+'deco_018.png', w:61, h:95 },
+  { id:'deco_019', name:'Teal Painting',   cat:'Wall Art', src:DECOS+'deco_019.png', w:61, h:95 },
+  { id:'deco_065', name:'Wall Frame A',    cat:'Wall Art', src:DECOS+'deco_065.png', w:17, h:32 },
+  { id:'deco_066', name:'Wall Frame B',    cat:'Wall Art', src:DECOS+'deco_066.png', w:17, h:32 },
+  { id:'deco_067', name:'Wall Frame C',    cat:'Wall Art', src:DECOS+'deco_067.png', w:17, h:32 },
+  { id:'deco_068', name:'Wall Frame D',    cat:'Wall Art', src:DECOS+'deco_068.png', w:17, h:32 },
+  { id:'deco_069', name:'Wall Frame E',    cat:'Wall Art', src:DECOS+'deco_069.png', w:17, h:32 },
+  { id:'deco_070', name:'Wall Frame F',    cat:'Wall Art', src:DECOS+'deco_070.png', w:17, h:32 },
+  { id:'deco_074', name:'Photo Frame A',   cat:'Wall Art', src:DECOS+'deco_074.png', w:43, h:37 },
+  { id:'deco_075', name:'Photo Frame B',   cat:'Wall Art', src:DECOS+'deco_075.png', w:43, h:37 },
+  { id:'deco_076', name:'Photo Frame C',   cat:'Wall Art', src:DECOS+'deco_076.png', w:43, h:37 },
+  { id:'deco_077', name:'Wall Frame G',    cat:'Wall Art', src:DECOS+'deco_077.png', w:17, h:32 },
+  { id:'deco_078', name:'Photo Frame D',   cat:'Wall Art', src:DECOS+'deco_078.png', w:43, h:37 },
+  { id:'deco_079', name:'Wall Frame H',    cat:'Wall Art', src:DECOS+'deco_079.png', w:17, h:32 },
+  { id:'deco_080', name:'Wall Frame I',    cat:'Wall Art', src:DECOS+'deco_080.png', w:17, h:32 },
+  // Windows
+  { id:'deco_016', name:'Blue Window',     cat:'Windows', src:DECOS+'deco_016.png', w:64, h:123 },
+  { id:'deco_017', name:'Bamboo Window',   cat:'Windows', src:DECOS+'deco_017.png', w:64, h:123 },
+  { id:'deco_038', name:'Teal Window',     cat:'Windows', src:DECOS+'deco_038.png', w:64, h:123 },
+  { id:'deco_039', name:'Pink Window',     cat:'Windows', src:DECOS+'deco_039.png', w:64, h:123 },
+  { id:'deco_028', name:'Blue Curtain',    cat:'Windows', src:DECOS+'deco_028.png', w:110, h:82 },
+  { id:'deco_029', name:'Green Curtain',   cat:'Windows', src:DECOS+'deco_029.png', w:110, h:82 },
+  { id:'deco_046', name:'Pink Curtain',    cat:'Windows', src:DECOS+'deco_046.png', w:110, h:82 },
+  { id:'deco_047', name:'Brown Curtain',   cat:'Windows', src:DECOS+'deco_047.png', w:110, h:82 },
+  { id:'deco_063', name:'Tan Curtain',     cat:'Windows', src:DECOS+'deco_063.png', w:110, h:82 },
+  { id:'deco_064', name:'Grey Curtain',    cat:'Windows', src:DECOS+'deco_064.png', w:110, h:82 },
+  { id:'deco_060', name:'Wide Window A',   cat:'Windows', src:DECOS+'deco_060.png', w:93, h:139 },
+  { id:'deco_061', name:'Wide Window B',   cat:'Windows', src:DECOS+'deco_061.png', w:93, h:139 },
+  { id:'deco_062', name:'Wide Window C',   cat:'Windows', src:DECOS+'deco_062.png', w:93, h:139 },
+  // Shelves
+  { id:'deco_053', name:'Wood Shelf A',    cat:'Shelves', src:DECOS+'deco_053.png', w:100, h:128 },
+  { id:'deco_071', name:'Wood Shelf B',    cat:'Shelves', src:DECOS+'deco_071.png', w:100, h:129 },
+  { id:'deco_091', name:'Blue Shelf',      cat:'Shelves', src:DECOS+'deco_091.png', w:100, h:128 },
+  { id:'deco_117', name:'Green Shelf',     cat:'Shelves', src:DECOS+'deco_117.png', w:100, h:127 },
+  { id:'deco_146', name:'Purple Shelf',    cat:'Shelves', src:DECOS+'deco_146.png', w:100, h:127 },
+  // Deco Cat Towers
+  { id:'deco_013', name:'White Tower',     cat:'Deco Towers', src:DECOS+'deco_013.png', w:85, h:175, interact:'play' },
+  { id:'deco_014', name:'Brown Tower',     cat:'Deco Towers', src:DECOS+'deco_014.png', w:85, h:175, interact:'play' },
+  { id:'deco_015', name:'Grey Tower',      cat:'Deco Towers', src:DECOS+'deco_015.png', w:85, h:175, interact:'play' },
+  { id:'deco_051', name:'Tall Tower A',    cat:'Deco Towers', src:DECOS+'deco_051.png', w:111, h:158, interact:'play' },
+  { id:'deco_081', name:'Tall Tower B',    cat:'Deco Towers', src:DECOS+'deco_081.png', w:111, h:158, interact:'play' },
+  // Deco Beds/Cushions
+  { id:'deco_002', name:'Blue Cushion',    cat:'Deco Beds', src:DECOS+'deco_002.png', w:64, h:110, interact:'sleep' },
+  { id:'deco_003', name:'Grey Cushion',    cat:'Deco Beds', src:DECOS+'deco_003.png', w:64, h:110, interact:'sleep' },
+  { id:'deco_004', name:'Dark Cushion',    cat:'Deco Beds', src:DECOS+'deco_004.png', w:64, h:110, interact:'sleep' },
+  // Plants
+  { id:'deco_040', name:'Small Plant A',   cat:'Plants', src:DECOS+'deco_040.png', w:41, h:63 },
+  { id:'deco_041', name:'Small Plant B',   cat:'Plants', src:DECOS+'deco_041.png', w:38, h:62 },
+  { id:'deco_042', name:'Pot Plant A',     cat:'Plants', src:DECOS+'deco_042.png', w:23, h:29 },
+  { id:'deco_043', name:'Pot Plant B',     cat:'Plants', src:DECOS+'deco_043.png', w:23, h:29 },
+  { id:'deco_044', name:'Pot Plant C',     cat:'Plants', src:DECOS+'deco_044.png', w:23, h:29 },
+  { id:'deco_045', name:'Pot Plant D',     cat:'Plants', src:DECOS+'deco_045.png', w:23, h:29 },
+  { id:'deco_054', name:'Pot Plant E',     cat:'Plants', src:DECOS+'deco_054.png', w:23, h:29 },
+  { id:'deco_056', name:'Pot Plant F',     cat:'Plants', src:DECOS+'deco_056.png', w:23, h:29 },
+  { id:'deco_052', name:'Hanging Plant',   cat:'Plants', src:DECOS+'deco_052.png', w:39, h:89 },
+  { id:'deco_055', name:'Tall Plant A',    cat:'Plants', src:DECOS+'deco_055.png', w:45, h:108 },
+  { id:'deco_072', name:'Tall Plant B',    cat:'Plants', src:DECOS+'deco_072.png', w:45, h:108 },
+  { id:'deco_092', name:'Tall Plant C',    cat:'Plants', src:DECOS+'deco_092.png', w:45, h:108 },
+  { id:'deco_118', name:'Tall Plant D',    cat:'Plants', src:DECOS+'deco_118.png', w:45, h:108 },
+  { id:'deco_073', name:'Floor Plant A',   cat:'Plants', src:DECOS+'deco_073.png', w:55, h:77 },
+  { id:'deco_093', name:'Floor Plant B',   cat:'Plants', src:DECOS+'deco_093.png', w:55, h:77 },
+  // Lamps
+  { id:'deco_133', name:'Floor Lamp A',    cat:'Lamps', src:DECOS+'deco_133.png', w:33, h:90 },
+  { id:'deco_134', name:'Floor Lamp B',    cat:'Lamps', src:DECOS+'deco_134.png', w:33, h:90 },
+  { id:'deco_135', name:'Floor Lamp C',    cat:'Lamps', src:DECOS+'deco_135.png', w:33, h:90 },
+  { id:'deco_136', name:'Floor Lamp D',    cat:'Lamps', src:DECOS+'deco_136.png', w:33, h:90 },
+  { id:'deco_137', name:'Floor Lamp E',    cat:'Lamps', src:DECOS+'deco_137.png', w:33, h:90 },
+  { id:'deco_138', name:'Floor Lamp F',    cat:'Lamps', src:DECOS+'deco_138.png', w:33, h:90 },
+  // Tables
+  { id:'deco_086', name:'Table A',         cat:'Tables', src:DECOS+'deco_086.png', w:55, h:92 },
+  { id:'deco_087', name:'Table B',         cat:'Tables', src:DECOS+'deco_087.png', w:55, h:92 },
+  { id:'deco_088', name:'Table C',         cat:'Tables', src:DECOS+'deco_088.png', w:55, h:92 },
+  { id:'deco_089', name:'Table D',         cat:'Tables', src:DECOS+'deco_089.png', w:55, h:92 },
+  { id:'deco_090', name:'Table E',         cat:'Tables', src:DECOS+'deco_090.png', w:55, h:92 },
+  { id:'deco_112', name:'Coffee Table A',  cat:'Tables', src:DECOS+'deco_112.png', w:61, h:61 },
+  { id:'deco_113', name:'Coffee Table B',  cat:'Tables', src:DECOS+'deco_113.png', w:61, h:61 },
+  { id:'deco_114', name:'Coffee Table C',  cat:'Tables', src:DECOS+'deco_114.png', w:61, h:61 },
+  { id:'deco_115', name:'Coffee Table D',  cat:'Tables', src:DECOS+'deco_115.png', w:61, h:61 },
+  { id:'deco_116', name:'Coffee Table E',  cat:'Tables', src:DECOS+'deco_116.png', w:61, h:61 },
+  // Bowls
+  { id:'deco_082', name:'Bowl A',          cat:'Deco Bowls', src:DECOS+'deco_082.png', w:43, h:37 },
+  { id:'deco_083', name:'Bowl B',          cat:'Deco Bowls', src:DECOS+'deco_083.png', w:43, h:37 },
+  { id:'deco_084', name:'Bowl C',          cat:'Deco Bowls', src:DECOS+'deco_084.png', w:43, h:37 },
+  { id:'deco_085', name:'Bowl D',          cat:'Deco Bowls', src:DECOS+'deco_085.png', w:43, h:37 },
+  { id:'deco_094', name:'Bowl E',          cat:'Deco Bowls', src:DECOS+'deco_094.png', w:43, h:37 },
+  { id:'deco_095', name:'Bowl F',          cat:'Deco Bowls', src:DECOS+'deco_095.png', w:43, h:37 },
+  { id:'deco_096', name:'Bowl G',          cat:'Deco Bowls', src:DECOS+'deco_096.png', w:43, h:37 },
+  { id:'deco_097', name:'Bowl H',          cat:'Deco Bowls', src:DECOS+'deco_097.png', w:43, h:37 },
+  { id:'deco_102', name:'Bowl I',          cat:'Deco Bowls', src:DECOS+'deco_102.png', w:43, h:37 },
+  { id:'deco_103', name:'Bowl J',          cat:'Deco Bowls', src:DECOS+'deco_103.png', w:43, h:37 },
+  { id:'deco_122', name:'Bowl K',          cat:'Deco Bowls', src:DECOS+'deco_122.png', w:43, h:37 },
+  { id:'deco_123', name:'Bowl L',          cat:'Deco Bowls', src:DECOS+'deco_123.png', w:43, h:37 },
+  { id:'deco_140', name:'Bowl M',          cat:'Deco Bowls', src:DECOS+'deco_140.png', w:43, h:37 },
+  { id:'deco_141', name:'Bowl N',          cat:'Deco Bowls', src:DECOS+'deco_141.png', w:43, h:37 },
+  // Rugs
+  { id:'deco_005', name:'Pink Rug',        cat:'Rugs', src:DECOS+'deco_005.png', w:22, h:20 },
+  { id:'deco_006', name:'Tan Rug',         cat:'Rugs', src:DECOS+'deco_006.png', w:22, h:20 },
+  { id:'deco_009', name:'Green Rug',       cat:'Rugs', src:DECOS+'deco_009.png', w:22, h:20 },
+  { id:'deco_010', name:'Dark Rug',        cat:'Rugs', src:DECOS+'deco_010.png', w:22, h:20 },
+  { id:'deco_020', name:'Orange Rug',      cat:'Rugs', src:DECOS+'deco_020.png', w:22, h:20 },
+  { id:'deco_021', name:'Red Rug',         cat:'Rugs', src:DECOS+'deco_021.png', w:22, h:20 },
+  { id:'deco_024', name:'Yellow Rug',      cat:'Rugs', src:DECOS+'deco_024.png', w:22, h:20 },
+  { id:'deco_025', name:'Coral Rug',       cat:'Rugs', src:DECOS+'deco_025.png', w:22, h:20 },
+  { id:'deco_030', name:'Peach Rug',       cat:'Rugs', src:DECOS+'deco_030.png', w:22, h:20 },
+  { id:'deco_031', name:'Plum Rug',        cat:'Rugs', src:DECOS+'deco_031.png', w:22, h:20 },
+  { id:'deco_034', name:'Lime Rug',        cat:'Rugs', src:DECOS+'deco_034.png', w:22, h:20 },
+  { id:'deco_035', name:'Rose Rug',        cat:'Rugs', src:DECOS+'deco_035.png', w:22, h:20 },
+  { id:'deco_120', name:'Floor Mat A',     cat:'Rugs', src:DECOS+'deco_120.png', w:43, h:34 },
+  { id:'deco_139', name:'Floor Mat B',     cat:'Rugs', src:DECOS+'deco_139.png', w:43, h:34 },
+  { id:'deco_147', name:'Floor Mat C',     cat:'Rugs', src:DECOS+'deco_147.png', w:43, h:34 },
+  { id:'deco_148', name:'Floor Mat D',     cat:'Rugs', src:DECOS+'deco_148.png', w:43, h:34 },
+  { id:'deco_150', name:'Floor Mat E',     cat:'Rugs', src:DECOS+'deco_150.png', w:43, h:34 },
+  { id:'deco_151', name:'Floor Mat F',     cat:'Rugs', src:DECOS+'deco_151.png', w:43, h:34 },
+  // Small Decor
+  { id:'deco_048', name:'Bottle A',        cat:'Small Decor', src:DECOS+'deco_048.png', w:25, h:46 },
+  { id:'deco_049', name:'Bottle B',        cat:'Small Decor', src:DECOS+'deco_049.png', w:25, h:46 },
+  { id:'deco_050', name:'Bottle C',        cat:'Small Decor', src:DECOS+'deco_050.png', w:25, h:46 },
+  { id:'deco_057', name:'Bottle D',        cat:'Small Decor', src:DECOS+'deco_057.png', w:25, h:46 },
+  { id:'deco_058', name:'Bottle E',        cat:'Small Decor', src:DECOS+'deco_058.png', w:25, h:46 },
+  { id:'deco_059', name:'Bottle F',        cat:'Small Decor', src:DECOS+'deco_059.png', w:25, h:46 },
+  { id:'deco_098', name:'Cat Treat',       cat:'Small Decor', src:DECOS+'deco_098.png', w:33, h:43 },
+  { id:'deco_099', name:'Scratch Pole',    cat:'Small Decor', src:DECOS+'deco_099.png', w:33, h:63 },
+  { id:'deco_106', name:'Mouse Toy',       cat:'Small Decor', src:DECOS+'deco_106.png', w:52, h:33 },
+  { id:'deco_149', name:'Sleeping Cat',    cat:'Small Decor', src:DECOS+'deco_149.png', w:43, h:32 },
 ];
 
-// Preload all furniture images
-const furnitureImgs = {};
-let furnitureLoaded = 0;
-for (const f of FURNITURE) {
-  const img = new Image();
-  img.onload = img.onerror = () => {
-    furnitureImgs[f.id] = img;
-    if (++furnitureLoaded >= FURNITURE.length) onAllLoaded();
-  };
-  img.src = f.src;
+// ═══════ IMAGE LOADING ═══════
+const itemImgs = {};
+const imgSrcSet = new Set();
+for (const item of CATALOG) {
+  if (!imgSrcSet.has(item.src)) {
+    imgSrcSet.add(item.src);
+    const img = new Image();
+    img.onload = () => { itemImgs[item.src] = img; };
+    img.src = item.src;
+  }
 }
 
-// Room background images cache
+// Room images
 const roomImgs = {};
 
-// ═══════ MOCHI SPRITE ENGINE ═══════
+// ═══════ MOCHI ═══════
 const ANIMS = {
-  idle:    { src: SPRITE_BASE+'Idle.png', frames: 10, speed: 150 },
-  idle2:   { src: SPRITE_BASE+'Idle2.png', frames: 10, speed: 150 },
-  sleep:   { src: SPRITE_BASE+'Sleep.png', frames: 4, speed: 350 },
-  laydown: { src: SPRITE_BASE+'LayDown.png', frames: 12, speed: 140, once: true },
-  eating:  { src: SPRITE_BASE+'Eating.png', frames: 15, speed: 120 },
-  dance:   { src: SPRITE_BASE+'Dance.png', frames: 4, speed: 180 },
-  excited: { src: SPRITE_BASE+'Excited.png', frames: 12, speed: 120 },
-  waiting: { src: SPRITE_BASE+'Waiting.png', frames: 6, speed: 200 },
+  idle:    { src: SPRITES+'Idle.png',    frames:10, speed:150 },
+  idle2:   { src: SPRITES+'Idle2.png',   frames:10, speed:150 },
+  sleep:   { src: SPRITES+'Sleep.png',   frames:4,  speed:350 },
+  laydown: { src: SPRITES+'LayDown.png', frames:12, speed:140, once:true },
+  eating:  { src: SPRITES+'Eating.png',  frames:15, speed:120 },
+  dance:   { src: SPRITES+'Dance.png',   frames:4,  speed:180 },
+  excited: { src: SPRITES+'Excited.png', frames:12, speed:120 },
+  waiting: { src: SPRITES+'Waiting.png', frames:6,  speed:200 },
 };
 const mochiImgs = {};
-let mochiLoaded = 0;
-const mochiTotal = Object.keys(ANIMS).length;
 for (const [name, a] of Object.entries(ANIMS)) {
   const img = new Image();
-  img.onload = img.onerror = () => { mochiImgs[name] = img; mochiLoaded++; };
+  img.onload = () => { mochiImgs[name] = img; };
   img.src = a.src;
 }
 
 let mochiAnim = 'idle', mochiFrame = 0, mochiLastT = 0, mochiAnimCb = null;
-let mochiX = 240, mochiY = 350; // position in room canvas
-let mochiTargetX = null, mochiTargetY = null;
-let mochiFlip = false;
+let mochiX = 240, mochiY = 350, mochiTargetX = null, mochiTargetY = null, mochiFlip = false, mochiMoveCb = null;
+
+// ═══════ FOOD BOWL STATE ═══════
+// Bowl fullness: stored per-room in localStorage
+// Key: bowlState_{roomNum} = { "itemIndex": fullness (0-1) }
+function getBowlStates() {
+  const s = localStorage.getItem('bowlState_' + currentRoom);
+  return s ? JSON.parse(s) : {};
+}
+function saveBowlStates(states) {
+  localStorage.setItem('bowlState_' + currentRoom, JSON.stringify(states));
+}
+function isBowlItem(id) {
+  return id && id.startsWith('bowl-');
+}
+
+// ═══════ AUTONOMOUS MOCHI (Play Mode) ═══════
+let autoWanderTimer = null;
+
+function startAutoWander() {
+  stopAutoWander();
+  if (mode !== 'play') return;
+
+  const wander = () => {
+    if (mode !== 'play' || mochiTargetX !== null) {
+      autoWanderTimer = setTimeout(wander, 3000);
+      return;
+    }
+
+    const items = getPlacedItems();
+    if (items.length > 0 && Math.random() > 0.3) {
+      // Go interact with a random placed item
+      const idx = Math.floor(Math.random() * items.length);
+      const item = items[idx];
+      const def = CATALOG.find(f => f.id === item.id);
+      const dims = getItemDims(item);
+      const tx = item.x + dims.w/2 - S/2;
+      const ty = item.y + dims.h - S;
+      const interact = def?.interact || 'play';
+
+      mochiMoveTo(tx, ty, () => {
+        if (interact === 'eat' && isBowlItem(item.id)) {
+          // Eat from bowl — deplete it
+          const states = getBowlStates();
+          const key = '' + idx;
+          const fullness = states[key] !== undefined ? states[key] : 1;
+          if (fullness > 0) {
+            mochiPlay('eating', () => {
+              states[key] = Math.max(0, fullness - 0.34);
+              saveBowlStates(states);
+              mochiPlay('idle');
+            });
+          } else {
+            mochiPlay('waiting', () => mochiPlay('idle'));
+          }
+        } else if (interact === 'sleep') {
+          mochiPlay('laydown', () => {
+            setTimeout(() => mochiPlay('idle'), 3000 + Math.random() * 4000);
+          });
+        } else if (interact === 'eat') {
+          mochiPlay('eating', () => mochiPlay('idle'));
+        } else {
+          mochiPlay('excited', () => mochiPlay('dance'));
+        }
+      });
+    } else {
+      // Random walk to empty spot
+      const rx = 100 + Math.random() * 300;
+      const ry = 250 + Math.random() * 200;
+      mochiMoveTo(rx, ry, () => {
+        const idleAnims = ['idle', 'idle2', 'waiting'];
+        mochiPlay(idleAnims[Math.floor(Math.random() * idleAnims.length)]);
+      });
+    }
+
+    autoWanderTimer = setTimeout(wander, 5000 + Math.random() * 8000);
+  };
+
+  autoWanderTimer = setTimeout(wander, 2000);
+}
+
+function stopAutoWander() {
+  if (autoWanderTimer) { clearTimeout(autoWanderTimer); autoWanderTimer = null; }
+}
 
 function mochiPlay(name, cb) {
   if (!ANIMS[name]) return;
   mochiAnim = name; mochiFrame = 0; mochiLastT = 0; mochiAnimCb = cb || null;
 }
-
 function mochiMoveTo(tx, ty, cb) {
   mochiTargetX = tx; mochiTargetY = ty;
   mochiFlip = tx < mochiX;
-  mochiPlay('idle2', null);
-  mochiMoveCb = cb || null;
+  mochiPlay('idle2'); mochiMoveCb = cb || null;
 }
-let mochiMoveCb = null;
-
-// Load saved mochi position
 function loadMochiPos() {
-  const saved = localStorage.getItem('mochiPos_' + currentRoom);
-  if (saved) {
-    const p = JSON.parse(saved);
-    mochiX = p.x; mochiY = p.y;
-  } else {
-    mochiX = 240; mochiY = 350;
-  }
+  const s = localStorage.getItem('mochiPos_' + currentRoom);
+  if (s) { const p = JSON.parse(s); mochiX = p.x; mochiY = p.y; }
+  else { mochiX = 240; mochiY = 350; }
   mochiTargetX = null; mochiTargetY = null;
 }
-
 function saveMochiPos() {
   localStorage.setItem('mochiPos_' + currentRoom, JSON.stringify({ x: mochiX, y: mochiY }));
 }
 
-// ═══════ ROOM CANVAS ═══════
+// ═══════ ROOM STATE ═══════
+let roomBgImg = null;
 const roomCanvas = document.getElementById('room-canvas');
 const rctx = roomCanvas.getContext('2d');
 rctx.imageSmoothingEnabled = false;
-
-let roomBgImg = null;
 
 function loadRoom(num) {
   currentRoom = num;
   localStorage.setItem('currentRoom', num);
   loadMochiPos();
   loadRoomLayout();
-
-  // Update picker highlights
   document.querySelectorAll('.room-thumb').forEach((t, i) => t.classList.toggle('active', i + 1 === num));
-
-  // Load bg
-  if (roomImgs[num]) {
-    roomBgImg = roomImgs[num];
-  } else {
+  if (roomImgs[num]) { roomBgImg = roomImgs[num]; }
+  else {
     const img = new Image();
     img.onload = () => { roomImgs[num] = img; roomBgImg = img; };
     img.src = ROOM_BASE + num + '.png';
   }
 }
-
 function loadRoomLayout() {
-  const saved = localStorage.getItem('roomLayout_' + currentRoom);
-  roomLayouts[currentRoom] = saved ? JSON.parse(saved) : [];
+  const s = localStorage.getItem('roomLayout_' + currentRoom);
+  roomLayouts[currentRoom] = s ? JSON.parse(s) : [];
 }
-
 function saveRoomLayout() {
   localStorage.setItem('roomLayout_' + currentRoom, JSON.stringify(roomLayouts[currentRoom] || []));
 }
+function getPlacedItems() { return roomLayouts[currentRoom] || []; }
 
-function getPlacedItems() {
-  return roomLayouts[currentRoom] || [];
+// Get the draw dimensions for an item
+function getItemDims(item) {
+  const def = CATALOG.find(f => f.id === item.id);
+  if (def) return { w: def.cropW || def.w, h: def.cropH || def.h };
+  return { w: 32, h: 32 };
 }
 
-// ═══════ RENDER LOOP ═══════
+// Draw a single item onto a context
+function drawItem(ctx, item, x, y) {
+  const def = CATALOG.find(f => f.id === item.id);
+  if (def) {
+    const img = itemImgs[def.src];
+    if (!img) return;
+    if (def.cropW) {
+      ctx.drawImage(img, def.cropX||0, def.cropY||0, def.cropW, def.cropH, x, y, def.cropW, def.cropH);
+    } else {
+      ctx.drawImage(img, x, y, def.w, def.h);
+    }
+  }
+}
+
+// ═══════ RENDER ═══════
+let dragPreview = null;
+
 function render(t) {
   rctx.clearRect(0, 0, 512, 512);
-
-  // Draw room background
   if (roomBgImg) rctx.drawImage(roomBgImg, 0, 0, 512, 512);
 
-  // Collect all drawable items (placed furniture + mochi) for z-sorting
   const drawables = [];
 
-  for (const item of getPlacedItems()) {
-    const def = FURNITURE.find(f => f.id === item.id);
-    const img = furnitureImgs[item.id];
-    if (def && img) {
-      const drawW = def.cropW || def.w;
-      const drawH = def.cropH || def.h;
-      drawables.push({ y: item.y + drawH, draw: () => {
-        if (def.cropW) {
-          // Sprite sheet — draw first frame only
-          rctx.drawImage(img, 0, 0, def.cropW, def.cropH, item.x, item.y, def.cropW, def.cropH);
-        } else {
-          rctx.drawImage(img, item.x, item.y, drawW, drawH);
+  // Placed items
+  const bowlStates = getBowlStates();
+  const placedItems = getPlacedItems();
+  for (let i = 0; i < placedItems.length; i++) {
+    const item = placedItems[i];
+    const dims = getItemDims(item);
+    const idx = i;
+    drawables.push({ y: item.y + dims.h, draw: () => {
+      drawItem(rctx, item, item.x, item.y);
+      // Draw bowl fullness indicator
+      if (isBowlItem(item.id)) {
+        const fullness = bowlStates['' + idx] !== undefined ? bowlStates['' + idx] : 1;
+        if (fullness < 1) {
+          // Draw a small bar under the bowl
+          const bw = dims.w, bx = item.x, by = item.y + dims.h + 2;
+          rctx.fillStyle = 'rgba(0,0,0,0.4)';
+          rctx.fillRect(bx, by, bw, 3);
+          rctx.fillStyle = fullness > 0.5 ? '#6BFFB8' : fullness > 0 ? '#FFD96B' : '#FF6B6B';
+          rctx.fillRect(bx, by, bw * fullness, 3);
         }
-      }});
-    }
+      }
+    }});
   }
 
   // Mochi movement
-  if (mochiTargetX !== null && mochiTargetY !== null) {
-    const dx = mochiTargetX - mochiX;
-    const dy = mochiTargetY - mochiY;
+  if (mochiTargetX !== null) {
+    const dx = mochiTargetX - mochiX, dy = mochiTargetY - mochiY;
     const dist = Math.hypot(dx, dy);
     if (dist < 3) {
-      mochiX = mochiTargetX;
-      mochiY = mochiTargetY;
+      mochiX = mochiTargetX; mochiY = mochiTargetY;
       mochiTargetX = null; mochiTargetY = null;
       saveMochiPos();
       if (mochiMoveCb) { const cb = mochiMoveCb; mochiMoveCb = null; cb(); }
       else mochiPlay('idle');
     } else {
-      const speed = 2;
-      mochiX += (dx / dist) * speed;
-      mochiY += (dy / dist) * speed;
+      mochiX += (dx / dist) * 2;
+      mochiY += (dy / dist) * 2;
     }
   }
 
-  // Mochi sprite — advance frame
-  const animDef = ANIMS[mochiAnim], animImg = mochiImgs[mochiAnim];
-  if (animDef && animImg && t - mochiLastT >= animDef.speed) {
+  // Mochi frame
+  const ad = ANIMS[mochiAnim], ai = mochiImgs[mochiAnim];
+  if (ad && ai && t - mochiLastT >= ad.speed) {
     mochiLastT = t;
-    if (mochiFrame >= animDef.frames) {
-      if (animDef.once && mochiAnimCb) { const cb = mochiAnimCb; mochiAnimCb = null; cb(); }
+    if (mochiFrame >= ad.frames) {
+      if (ad.once && mochiAnimCb) { const cb = mochiAnimCb; mochiAnimCb = null; cb(); }
       mochiFrame = 0;
     }
     mochiFrame++;
   }
 
-  // Draw Mochi (z-sorted with furniture)
-  const mFrame = Math.max(0, Math.min(mochiFrame - 1, (ANIMS[mochiAnim]?.frames || 1) - 1));
-  drawables.push({ y: mochiY + S, draw: () => {
+  const MOCHI_DRAW = 64; // Draw Mochi bigger than 32px source
+  const mf = Math.max(0, Math.min((mochiFrame || 1) - 1, (ANIMS[mochiAnim]?.frames || 1) - 1));
+  drawables.push({ y: mochiY + MOCHI_DRAW, draw: () => {
     rctx.save();
     if (mochiFlip) {
-      rctx.translate(mochiX + S, mochiY);
+      rctx.translate(mochiX + MOCHI_DRAW, mochiY);
       rctx.scale(-1, 1);
-      if (animImg) rctx.drawImage(animImg, mFrame * S, 0, S, S, 0, 0, S, S);
+      if (ai) rctx.drawImage(ai, mf * S, 0, S, S, 0, 0, MOCHI_DRAW, MOCHI_DRAW);
     } else {
-      if (animImg) rctx.drawImage(animImg, mFrame * S, 0, S, S, mochiX, mochiY, S, S);
+      if (ai) rctx.drawImage(ai, mf * S, 0, S, S, mochiX, mochiY, MOCHI_DRAW, MOCHI_DRAW);
     }
     rctx.restore();
   }});
 
-  // Z-sort: lower y = further back
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 
   // Drag preview
   if (dragPreview) {
     rctx.globalAlpha = 0.5;
-    const def = FURNITURE.find(f => f.id === dragPreview.id);
-    const img = furnitureImgs[dragPreview.id];
-    if (def && img) {
-      const dw = def.cropW || def.w;
-      const dh = def.cropH || def.h;
-      if (def.cropW) {
-        rctx.drawImage(img, 0, 0, def.cropW, def.cropH, dragPreview.x - dw/2, dragPreview.y - dh/2, dw, dh);
-      } else {
-        rctx.drawImage(img, dragPreview.x - dw/2, dragPreview.y - dh/2, dw, dh);
-      }
-    }
+    drawItem(rctx, dragPreview, dragPreview.x - (dragPreview.dw||16)/2, dragPreview.y - (dragPreview.dh||16)/2);
     rctx.globalAlpha = 1;
   }
 
@@ -406,82 +630,87 @@ function render(t) {
 function setupRoomPicker() {
   const picker = document.getElementById('room-picker');
   for (let i = 1; i <= ROOM_COUNT; i++) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 48; canvas.height = 48;
-    canvas.className = 'room-thumb' + (i === currentRoom ? ' active' : '');
-    canvas.title = 'Room ' + i;
-
+    const c = document.createElement('canvas');
+    c.width = 48; c.height = 48;
+    c.className = 'room-thumb' + (i === currentRoom ? ' active' : '');
+    c.title = 'Room ' + i;
+    const num = i;
     const img = new Image();
-    const roomNum = i;
     img.onload = () => {
-      const tc = canvas.getContext('2d');
+      const tc = c.getContext('2d');
       tc.imageSmoothingEnabled = false;
       tc.drawImage(img, 0, 0, 512, 512, 0, 0, 48, 48);
-      roomImgs[roomNum] = img;
+      roomImgs[num] = img;
     };
     img.src = ROOM_BASE + i + '.png';
-
-    canvas.onclick = () => loadRoom(roomNum);
-    picker.appendChild(canvas);
+    c.onclick = () => loadRoom(num);
+    picker.appendChild(c);
   }
 }
 
 // ═══════ PALETTE ═══════
 function setupPalette() {
   const palette = document.getElementById('palette');
-  const categories = [...new Set(FURNITURE.map(f => f.cat))];
 
-  for (const cat of categories) {
+  // Group by category, preserving order
+  const catOrder = [];
+  const catItems = {};
+  for (const item of CATALOG) {
+    if (!catItems[item.cat]) { catOrder.push(item.cat); catItems[item.cat] = []; }
+    catItems[item.cat].push(item);
+  }
+
+  for (const cat of catOrder) {
     const label = document.createElement('div');
-    label.className = 'palette-cat';
+    label.className = 'pal-cat open';
     label.textContent = cat;
     palette.appendChild(label);
 
     const grid = document.createElement('div');
-    grid.className = 'palette-grid';
+    grid.className = 'pal-grid';
 
-    const items = FURNITURE.filter(f => f.cat === cat);
-    for (const item of items) {
+    label.onclick = () => {
+      label.classList.toggle('open');
+      grid.classList.toggle('hidden');
+    };
+
+    for (const item of catItems[cat]) {
       const el = document.createElement('div');
-      el.className = 'palette-item';
+      el.className = 'pal-item';
       el.title = item.name;
-      el.dataset.itemId = item.id;
 
       const thumb = document.createElement('canvas');
-      thumb.width = 48; thumb.height = 48;
+      thumb.width = 56; thumb.height = 56;
       el.appendChild(thumb);
 
-      // Draw thumbnail when image loads
-      const drawThumb = () => {
-        const img = furnitureImgs[item.id];
-        if (!img) return;
+      const lbl = document.createElement('div');
+      lbl.className = 'pal-item-label';
+      lbl.textContent = item.name;
+      el.appendChild(lbl);
+
+      // Draw thumbnail
+      const tryDraw = () => {
+        const img = itemImgs[item.src];
+        if (!img) return false;
         const tc = thumb.getContext('2d');
         tc.imageSmoothingEnabled = false;
-        tc.clearRect(0, 0, 48, 48);
-        if (item.cropW) {
-          // Sprite sheet: draw first frame
-          const scale = Math.min(48 / item.cropW, 48 / item.cropH);
-          const dw = item.cropW * scale, dh = item.cropH * scale;
-          tc.drawImage(img, 0, 0, item.cropW, item.cropH, (48-dw)/2, (48-dh)/2, dw, dh);
-        } else {
-          const scale = Math.min(48 / item.w, 48 / item.h);
-          const dw = item.w * scale, dh = item.h * scale;
-          tc.drawImage(img, 0, 0, item.w, item.h, (48-dw)/2, (48-dh)/2, dw, dh);
-        }
+        tc.clearRect(0, 0, 56, 56);
+        const sx = item.cropX || 0, sy = item.cropY || 0;
+        const sw = item.cropW || item.w, sh = item.cropH || item.h;
+        const scale = Math.min(52 / sw, 52 / sh);
+        const dw = sw * scale, dh = sh * scale;
+        tc.drawImage(img, sx, sy, sw, sh, (56-dw)/2, (56-dh)/2, dw, dh);
+        return true;
       };
-
-      if (furnitureImgs[item.id]) drawThumb();
-      else {
-        const check = setInterval(() => {
-          if (furnitureImgs[item.id]) { clearInterval(check); drawThumb(); }
-        }, 100);
+      if (!tryDraw()) {
+        const iv = setInterval(() => { if (tryDraw()) clearInterval(iv); }, 100);
       }
 
-      // Drag start
       el.addEventListener('mousedown', (e) => {
         if (mode !== 'edit') return;
         e.preventDefault();
-        startDrag(item.id, e);
+        const dims = getItemDims(item);
+        startDrag({ id: item.id, dw: dims.w, dh: dims.h }, e);
       });
 
       grid.appendChild(el);
@@ -491,51 +720,46 @@ function setupPalette() {
 }
 
 // ═══════ DRAG & DROP ═══════
-let dragPreview = null; // { id, x, y } in canvas coords
-let dragging = null; // { id, fromPalette: bool }
+let dragging = null;
 let dragExistingIdx = -1;
 
 function canvasCoords(e) {
   const rect = roomCanvas.getBoundingClientRect();
-  const scaleX = 512 / rect.width;
-  const scaleY = 512 / rect.height;
-  return {
-    x: (e.clientX - rect.left) * scaleX,
-    y: (e.clientY - rect.top) * scaleY
-  };
+  const x = (e.clientX - rect.left) * (512 / rect.width);
+  const y = (e.clientY - rect.top) * (512 / rect.height);
+  return { x, y, inside: x >= 0 && x <= 512 && y >= 0 && y <= 512 };
 }
 
-function startDrag(itemId, e) {
-  dragging = { id: itemId, fromPalette: true };
-  const pos = canvasCoords(e);
-  dragPreview = { id: itemId, x: pos.x, y: pos.y };
+function startDrag(itemData, e) {
+  dragging = { ...itemData, fromPalette: true };
+  dragExistingIdx = -1;
+  e.preventDefault();
 }
 
 document.addEventListener('mousemove', (e) => {
   if (!dragging) return;
   const pos = canvasCoords(e);
-  dragPreview = { id: dragging.id, x: pos.x, y: pos.y };
+  if (pos.inside) {
+    dragPreview = { ...dragging, x: pos.x, y: pos.y };
+  } else {
+    dragPreview = null;
+  }
 });
 
 document.addEventListener('mouseup', (e) => {
   if (!dragging) return;
   const pos = canvasCoords(e);
-  const def = FURNITURE.find(f => f.id === dragging.id);
 
-  // Check if drop is within canvas bounds
-  if (pos.x >= 0 && pos.x <= 512 && pos.y >= 0 && pos.y <= 512 && def) {
-    const dw = def.cropW || def.w;
-    const dh = def.cropH || def.h;
+  if (pos.inside) {
+    const dw = dragging.dw || 32, dh = dragging.dh || 32;
     const px = Math.round(pos.x - dw / 2);
     const py = Math.round(pos.y - dh / 2);
 
     if (dragExistingIdx >= 0) {
-      // Moving existing item
       const items = getPlacedItems();
       items[dragExistingIdx].x = px;
       items[dragExistingIdx].y = py;
     } else {
-      // New placement from palette
       const items = getPlacedItems();
       items.push({ id: dragging.id, x: px, y: py });
       roomLayouts[currentRoom] = items;
@@ -549,65 +773,90 @@ document.addEventListener('mouseup', (e) => {
 });
 
 // ═══════ ROOM CANVAS INTERACTION ═══════
-roomCanvas.addEventListener('mousedown', (e) => {
+roomCanvas.addEventListener('click', (e) => {
   const pos = canvasCoords(e);
+  if (!pos.inside) return;
 
   if (mode === 'edit') {
-    // Check if clicking an existing placed item to drag it
-    const items = getPlacedItems();
-    for (let i = items.length - 1; i >= 0; i--) {
-      const item = items[i];
-      const def = FURNITURE.find(f => f.id === item.id);
-      if (!def) continue;
-      const dw = def.cropW || def.w;
-      const dh = def.cropH || def.h;
-      if (pos.x >= item.x && pos.x <= item.x + dw && pos.y >= item.y && pos.y <= item.y + dh) {
-        dragging = { id: item.id, fromPalette: false };
-        dragExistingIdx = i;
-        dragPreview = { id: item.id, x: pos.x, y: pos.y };
-        e.preventDefault();
-        return;
-      }
-    }
+    return; // Edit clicks handled by mousedown for dragging
   } else if (mode === 'play') {
-    // Check if clicking on furniture — Mochi goes there and interacts
     const items = getPlacedItems();
     for (let i = items.length - 1; i >= 0; i--) {
       const item = items[i];
-      const def = FURNITURE.find(f => f.id === item.id);
-      if (!def) continue;
-      const dw = def.cropW || def.w;
-      const dh = def.cropH || def.h;
-      if (pos.x >= item.x && pos.x <= item.x + dw && pos.y >= item.y && pos.y <= item.y + dh) {
-        // Move Mochi to this item
-        const targetX = item.x + dw/2 - S/2;
-        const targetY = item.y + dh - S;
-        mochiMoveTo(targetX, targetY, () => {
-          if (def.interact === 'sleep') mochiPlay('laydown', () => mochiPlay('sleep'));
-          else if (def.interact === 'eat') mochiPlay('eating', () => mochiPlay('idle'));
-          else if (def.interact === 'play') mochiPlay('excited', () => mochiPlay('dance'));
+      const def = CATALOG.find(f => f.id === item.id);
+      const dims = getItemDims(item);
+      if (pos.x >= item.x && pos.x <= item.x + dims.w && pos.y >= item.y && pos.y <= item.y + dims.h) {
+        const tx = item.x + dims.w/2 - S/2, ty = item.y + dims.h - S;
+        const interact = def?.interact || 'play';
+
+        // Bowl: click to refill if empty, otherwise Mochi goes to eat
+        if (isBowlItem(item.id)) {
+          const states = getBowlStates();
+          const key = '' + i;
+          const fullness = states[key] !== undefined ? states[key] : 1;
+          if (fullness <= 0) {
+            // Refill the bowl
+            states[key] = 1;
+            saveBowlStates(states);
+            return;
+          }
+          // Mochi walks over and eats
+          mochiMoveTo(tx, ty, () => {
+            const st = getBowlStates();
+            const f = st[key] !== undefined ? st[key] : 1;
+            if (f > 0) {
+              mochiPlay('eating', () => {
+                st[key] = Math.max(0, f - 0.34);
+                saveBowlStates(st);
+                mochiPlay('idle');
+              });
+            } else {
+              mochiPlay('waiting', () => mochiPlay('idle'));
+            }
+          });
+          return;
+        }
+
+        mochiMoveTo(tx, ty, () => {
+          if (interact === 'sleep') mochiPlay('laydown', () => mochiPlay('sleep'));
+          else if (interact === 'eat') mochiPlay('eating', () => mochiPlay('idle'));
+          else mochiPlay('excited', () => mochiPlay('dance'));
         });
         return;
       }
     }
-    // Click empty floor — walk there
     mochiMoveTo(pos.x - S/2, pos.y - S, null);
   }
 });
 
-// Right-click to remove in edit mode
+// Mousedown for dragging existing placed items in edit mode
+roomCanvas.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return; // Only left click for dragging
+  if (mode !== 'edit') return;
+  const pos = canvasCoords(e);
+  if (!pos.inside) return;
+  const items = getPlacedItems();
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    const dims = getItemDims(item);
+    if (pos.x >= item.x && pos.x <= item.x + dims.w && pos.y >= item.y && pos.y <= item.y + dims.h) {
+      dragging = { id: item.id, dw: dims.w, dh: dims.h, fromPalette: false };
+      dragExistingIdx = i;
+      dragPreview = { ...dragging, x: pos.x, y: pos.y };
+      e.preventDefault();
+      return;
+    }
+  }
+});
+
 roomCanvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   if (mode !== 'edit') return;
   const pos = canvasCoords(e);
   const items = getPlacedItems();
   for (let i = items.length - 1; i >= 0; i--) {
-    const item = items[i];
-    const def = FURNITURE.find(f => f.id === item.id);
-    if (!def) continue;
-    const dw = def.cropW || def.w;
-    const dh = def.cropH || def.h;
-    if (pos.x >= item.x && pos.x <= item.x + dw && pos.y >= item.y && pos.y <= item.y + dh) {
+    const dims = getItemDims(items[i]);
+    if (pos.x >= items[i].x && pos.x <= items[i].x + dims.w && pos.y >= items[i].y && pos.y <= items[i].y + dims.h) {
       items.splice(i, 1);
       saveRoomLayout();
       return;
@@ -620,22 +869,16 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.onclick = () => {
     mode = btn.dataset.mode;
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-    const hint = document.getElementById('hint');
-    if (mode === 'edit') {
-      hint.textContent = 'Drag items from palette to place them \u2022 Right-click to remove';
-      roomCanvas.style.cursor = 'crosshair';
-    } else {
-      hint.textContent = 'Click furniture for Mochi to interact \u2022 Click floor to walk';
-      roomCanvas.style.cursor = 'pointer';
-    }
+    document.getElementById('hint').textContent = mode === 'edit'
+      ? 'Drag items from palette · Right-click placed items to remove'
+      : 'Click furniture for Mochi to interact · Click bowls to refill';
+    roomCanvas.style.cursor = mode === 'edit' ? 'crosshair' : 'pointer';
+    if (mode === 'play') startAutoWander();
+    else stopAutoWander();
   };
 });
 
 // ═══════ INIT ═══════
-function onAllLoaded() {
-  // furniture images ready — thumbnails will draw via interval checks
-}
-
 setupRoomPicker();
 setupPalette();
 loadRoom(currentRoom);

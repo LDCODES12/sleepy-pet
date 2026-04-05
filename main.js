@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain, Notification, globalShortcut } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
@@ -15,7 +15,9 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
 
-  // Auto-update from GitHub releases
+  // Auto-update from GitHub releases (token injected by CI for private repo)
+  const updateToken = '__UPDATE_TOKEN__';
+  if (updateToken && !updateToken.startsWith('__')) process.env.GH_TOKEN = updateToken;
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.checkForUpdatesAndNotify().catch(() => {});
@@ -81,15 +83,25 @@ function createTrayIcon() {
   } catch { return nativeImage.createEmpty(); }
 }
 
-function createTray() {
-  tray = new Tray(createTrayIcon());
-  tray.setToolTip('Sleepy Pet');
+function updateTrayMenu() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show Mochi', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+    { label: followMouse ? 'Stop Following' : 'Follow Mouse', click: () => {
+      followMouse = !followMouse;
+      if (followMouse) startFollowMouse(); else { stopFollowMouse(); resetPosition(); }
+      mainWindow?.webContents.send('stop-follow');
+      updateTrayMenu();
+    }},
     { label: 'Reset Position', click: resetPosition },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
   ]));
+}
+
+function createTray() {
+  tray = new Tray(createTrayIcon());
+  tray.setToolTip('Sleepy Pet');
+  updateTrayMenu();
   tray.on('click', () => { mainWindow?.show(); mainWindow?.focus(); });
 }
 
@@ -128,14 +140,18 @@ function startFollowMouse() {
     if (!mainWindow || !followMouse) return;
     const cursor = screen.getCursorScreenPoint();
     const [wx, wy] = mainWindow.getPosition();
-    // Lerp toward cursor position (cat is bottom-right of window)
-    const targetX = cursor.x - WIN_W + 32;
-    const targetY = cursor.y - WIN_H + 32;
+    // Lerp toward cursor — offset so the cat's face/eyes track the cursor
+    // Cat canvas: bottom:4, right:4, 64x64 → eyes ~20px down from sprite top
+    const targetX = cursor.x - WIN_W + 48;
+    const targetY = cursor.y - WIN_H + 48;
     const newX = Math.round(wx + (targetX - wx) * 0.08);
     const newY = Math.round(wy + (targetY - wy) * 0.08);
     if (newX !== wx || newY !== wy) {
       mainWindow.setPosition(newX, newY);
     }
+    // Tell renderer which direction the cursor is relative to the cat's eyes
+    const catEyesX = wx + WIN_W - 48;
+    mainWindow.webContents.send('cursor-dir', cursor.x < catEyesX ? 'left' : 'right');
   }, 16);
 }
 
@@ -145,8 +161,22 @@ function stopFollowMouse() {
 
 ipcMain.on('toggle-follow', (_, enabled) => {
   followMouse = enabled;
-  if (enabled) startFollowMouse();
-  else stopFollowMouse();
+  if (enabled) {
+    startFollowMouse();
+    // Register Escape to stop following
+    try { globalShortcut.register('Escape', () => {
+      followMouse = false;
+      stopFollowMouse();
+      resetPosition();
+      mainWindow?.webContents.send('stop-follow');
+      updateTrayMenu();
+      globalShortcut.unregister('Escape');
+    }); } catch {}
+  } else {
+    stopFollowMouse();
+    try { globalShortcut.unregister('Escape'); } catch {}
+  }
+  updateTrayMenu();
 });
 
 ipcMain.on('open-room', () => createRoomWindow());

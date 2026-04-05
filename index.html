@@ -18,6 +18,20 @@
       background: transparent;
     }
 
+    /* ── Mini room view ── */
+    #room-view {
+      position: absolute;
+      bottom: 4px; right: 4px;
+      width: 220px; height: 220px;
+      image-rendering: pixelated;
+      cursor: grab;
+      background: transparent;
+      display: none;
+      border-radius: 8px;
+    }
+    #room-view:active { cursor: grabbing; }
+    #room-view.show { display: block; }
+
     /* ── Speech bubble ── */
     .bubble {
       position: absolute; bottom: 72px; right: 4px;
@@ -72,35 +86,53 @@
     }
     .panel-close:hover { color: rgba(255,255,255,0.8); }
 
-    /* ── Settings ── */
-    #settings-panel { width: 200px; }
+    /* ── Settings (retro pixel style) ── */
+    #settings-panel { width: 180px; }
     .lbl {
-      display: block; font-size: 10px; text-transform: uppercase;
-      letter-spacing: 0.8px; color: rgba(255,255,255,0.4);
-      margin-bottom: 4px; margin-top: 10px;
+      display: block; font-size: 8px; text-transform: uppercase;
+      letter-spacing: 1.2px; color: rgba(200,180,255,0.5);
+      margin-bottom: 3px; margin-top: 8px;
+      font-family: monospace;
     }
     .lbl:first-of-type { margin-top: 0; }
-    .time-input {
-      width: 100%; background: rgba(255,255,255,0.07);
-      border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
-      color: #f0eaf8; font-size: 14px; font-weight: 600;
-      padding: 6px 8px; outline: none; -webkit-appearance: none;
+    .time-row {
+      display: flex; align-items: center; gap: 4px;
     }
-    .time-input:focus { border-color: rgba(180,160,240,0.5); }
-    .time-input::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; opacity: 0.4; }
-    .sleep-info { margin-top: 12px; display: flex; align-items: center; gap: 8px; }
-    .sleep-dur { font-weight: 600; font-size: 13px; min-width: 48px; }
-    .sleep-bar { flex: 1; height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
-    .sleep-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s, background 0.5s; }
-    .sleep-qual { font-size: 10px; font-weight: 500; margin-top: 4px; text-align: right; }
-    .bed-btn {
-      width: 100%; margin-top: 12px; font-size: 12px; font-weight: 600;
-      padding: 7px 0; border: none; border-radius: 10px; cursor: pointer;
-      background: linear-gradient(135deg, #6C5CE7, #8B7AEB); color: #fff;
-      box-shadow: 0 2px 8px rgba(108,92,231,0.3); transition: transform 0.15s;
+    .time-btn {
+      width: 20px; height: 20px; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 4px; background: rgba(255,255,255,0.06);
+      color: #c8b4ff; font-size: 12px; font-weight: bold;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-family: monospace; line-height: 1;
     }
-    .bed-btn:hover { transform: translateY(-1px); }
-    .bed-btn.wake { background: linear-gradient(135deg, #F0A050, #F0C060); }
+    .time-btn:hover { background: rgba(108,92,231,0.3); }
+    .time-btn:active { background: rgba(108,92,231,0.5); }
+    .time-display {
+      flex: 1; text-align: center;
+      font-family: monospace; font-size: 13px; font-weight: bold;
+      color: #e0d4ff; letter-spacing: 1px;
+    }
+    .sleep-info { margin-top: 10px; text-align: center; }
+    .sleep-dur {
+      font-family: monospace; font-weight: bold; font-size: 11px;
+      color: #c8b4ff; letter-spacing: 0.5px;
+    }
+    .sleep-bar { height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+    .sleep-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s, background 0.5s; }
+    .sleep-qual { font-family: monospace; font-size: 8px; font-weight: 500; margin-top: 3px; text-align: center; letter-spacing: 0.5px; }
+    .streak-row {
+      margin-top: 10px; padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      text-align: center;
+    }
+    .streak-count {
+      font-family: monospace; font-size: 18px; font-weight: bold;
+      color: #FFD96B; letter-spacing: 1px;
+    }
+    .streak-label {
+      font-family: monospace; font-size: 7px; text-transform: uppercase;
+      letter-spacing: 1.2px; color: rgba(200,180,255,0.4); margin-top: 2px;
+    }
 
     /* ── Inventory ── */
     #inv-panel { width: 220px; }
@@ -123,29 +155,43 @@
 <body>
   <!-- Cat -->
   <canvas id="cat-canvas" width="32" height="32"></canvas>
+  <canvas id="room-view" width="220" height="220"></canvas>
   <div class="bubble" id="bubble"></div>
 
   <!-- Menu -->
   <div class="menu" id="menu">
-    <button class="menu-btn" data-action="settings">Settings</button>
-    <button class="menu-btn" data-action="room">Visit Room</button>
+    <button class="menu-btn" data-action="goodnight" id="goodnight-btn">Goodnight</button>
+    <button class="menu-btn" data-action="settings">Sleep</button>
+    <button class="menu-btn" data-action="room">Edit Room</button>
+    <button class="menu-btn" data-action="viewroom" id="viewroom-btn">View Room</button>
     <button class="menu-btn" data-action="inv">Inventory</button>
     <button class="menu-btn" data-action="follow" id="follow-btn">Follow Mouse</button>
   </div>
 
   <!-- Settings -->
   <div class="panel" id="settings-panel">
-    <div class="panel-header"><h3>Settings</h3><button class="panel-close" data-panel="settings-panel">&times;</button></div>
+    <div class="panel-header"><h3 style="font-family:monospace;font-size:11px;letter-spacing:1px">Sleep</h3><button class="panel-close" data-panel="settings-panel">&times;</button></div>
     <span class="lbl">Bedtime</span>
-    <input type="time" class="time-input" id="bedtime" value="22:30">
+    <div class="time-row">
+      <button class="time-btn" data-target="bedtime" data-dir="-1">-</button>
+      <span class="time-display" id="bed-display">10:30 PM</span>
+      <button class="time-btn" data-target="bedtime" data-dir="1">+</button>
+    </div>
     <span class="lbl">Wake up</span>
-    <input type="time" class="time-input" id="alarm" value="07:00">
+    <div class="time-row">
+      <button class="time-btn" data-target="alarm" data-dir="-1">-</button>
+      <span class="time-display" id="alarm-display">7:00 AM</span>
+      <button class="time-btn" data-target="alarm" data-dir="1">+</button>
+    </div>
     <div class="sleep-info">
       <span class="sleep-dur" id="sleep-dur">8h 30m</span>
-      <div class="sleep-bar"><div class="sleep-bar-fill" id="bar-fill"></div></div>
     </div>
+    <div class="sleep-bar"><div class="sleep-bar-fill" id="bar-fill"></div></div>
     <div class="sleep-qual" id="sleep-qual"></div>
-    <button class="bed-btn" id="bed-btn">Go to Bed</button>
+    <div class="streak-row">
+      <div class="streak-count" id="streak-count">0</div>
+      <div class="streak-label">night streak</div>
+    </div>
   </div>
 
   <!-- Inventory -->
@@ -162,7 +208,7 @@
     // ═══════ MOUSE CLICK-THROUGH ═══════
     // Window ignores mouse by default. When mouse enters visible content,
     // we tell main process to stop ignoring so we can interact.
-    const interactiveEls = ['cat-canvas', 'menu', 'settings-panel', 'inv-panel'];
+    const interactiveEls = ['cat-canvas', 'room-view', 'menu', 'settings-panel', 'inv-panel'];
 
     function setupClickThrough() {
       for (const id of interactiveEls) {
@@ -192,11 +238,13 @@
       eating:    { src: BASE+'Eating.png', frames: 15, speed: 120 },
       dance:     { src: BASE+'Dance.png', frames: 4, speed: 180 },
       excited:   { src: BASE+'Excited.png', frames: 12, speed: 120 },
-      sad:       { src: BASE+'Sad.png', frames: 9, speed: 180 },
-      cry:       { src: BASE+'Cry.png', frames: 4, speed: 220 },
       surprised: { src: BASE+'Surprised.png', frames: 12, speed: 100 },
       waiting:   { src: BASE+'Waiting.png', frames: 6, speed: 200 },
-      box:       { src: BASE+'Box1.png', frames: 4, speed: 250 },
+      dead:      { src: BASE+'DeadCat.png', frames: 1, speed: 2000 },
+      lick:      { src: BASE+'Lick.png', frames: 13, speed: 140 },
+      shy:       { src: BASE+'Shy.png', frames: 9, speed: 160 },
+      refuse:    { src: BASE+'Refuse.png', frames: 12, speed: 140 },
+      despite:   { src: BASE+'Despite.png', frames: 4, speed: 200 },
     };
 
     const imgs = {};
@@ -210,14 +258,16 @@
     }
 
     let curAnim = 'idle', frame = 0, lastT = 0, animCb = null;
+    let catFlip = false; // true = face left
 
     // Atlas rendering: ribbons are 512x512 (16 cols x 16 rows of 32px cells)
     // Skins are 512x640 (16 cols x 20 rows of 32px cells)
     // Animation rows map: each anim name → row index in atlas
     const ATLAS_ANIM_ROWS = {
       idle: 0, idle2: 1, sleepy: 2, laydown: 3, sleep: 4,
-      eating: 5, dance: 6, excited: 7, sad: 8, cry: 9,
-      surprised: 10, waiting: 11, box: 12
+      eating: 5, dance: 6, excited: 7,
+      surprised: 10, waiting: 11,
+      // dead, lick, shy, refuse, despite not in ribbon/skin atlas — fall back to individual sprites
     };
     const ATLAS_COLS = 16;
 
@@ -244,26 +294,46 @@
     }
 
     function tick(t) {
+      // Auto-return from click animation
+      if (clickAnimEnd && t >= clickAnimEnd) {
+        clickAnimEnd = 0;
+        play(defaultIdle());
+        scheduleCycleAnim();
+      }
+
       const a = ANIMS[curAnim], img = imgs[curAnim];
-      if (a && img && t - lastT >= a.speed) {
+      if (!a || !img) { requestAnimationFrame(tick); return; }
+
+      // Advance frame on timer
+      if (t - lastT >= a.speed) {
         lastT = t;
+        frame++;
         if (frame >= a.frames) {
-          if (a.once && animCb) { const cb = animCb; animCb = null; cb(); requestAnimationFrame(tick); return; }
+          if (a.once && animCb) { const cb = animCb; animCb = null; cb(); }
           frame = 0;
         }
-        ctx.clearRect(0, 0, S, S);
-
-        // Use atlas if ribbon or skin selected, otherwise individual strip
-        const atlasImg = ribbonAtlasImg || skinAtlasImg;
-        const row = ATLAS_ANIM_ROWS[curAnim];
-        if (atlasImg && row !== undefined) {
-          const col = Math.min(frame, ATLAS_COLS - 1);
-          ctx.drawImage(atlasImg, col * S, row * S, S, S, 0, 0, S, S);
-        } else {
-          ctx.drawImage(img, frame * S, 0, S, S, 0, 0, S, S);
-        }
-        frame++;
       }
+
+      // Always redraw current frame (prevents stale canvas / shift)
+      const f = Math.min(frame, a.frames - 1);
+      ctx.clearRect(0, 0, S, S);
+      ctx.save();
+      if (catFlip) {
+        ctx.translate(S, 0);
+        ctx.scale(-1, 1);
+      }
+      const atlasImgSrc = ribbonAtlasImg || skinAtlasImg;
+      const row = ATLAS_ANIM_ROWS[curAnim];
+      if (atlasImgSrc && row !== undefined) {
+        ctx.drawImage(atlasImgSrc, f * S, row * S, S, S, 0, 0, S, S);
+      } else {
+        ctx.drawImage(img, f * S, 0, S, S, 0, 0, S, S);
+      }
+      ctx.restore();
+
+      // Update mini room view if active
+      if (showingRoom) renderRoomView();
+
       requestAnimationFrame(tick);
     }
 
@@ -277,11 +347,75 @@
     let alarmTime = localStorage.getItem('alarm') || '07:00';
     let state = 'awake', manualSleep = false;
 
+    // ═══════ STREAK ═══════
+    let streakCount = parseInt(localStorage.getItem('streakCount') || '0');
+    let streakLastDate = localStorage.getItem('streakLastDate') || '';
+
+    function todayStr() {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+    function yesterdayStr() {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+    function updateStreak(onTime) {
+      const today = todayStr();
+      if (onTime) {
+        if (streakLastDate === today) return; // already logged today
+        if (streakLastDate === yesterdayStr()) {
+          streakCount++;
+        } else {
+          streakCount = 1; // start new streak
+        }
+      } else {
+        streakCount = 0;
+      }
+      streakLastDate = today;
+      localStorage.setItem('streakCount', streakCount);
+      localStorage.setItem('streakLastDate', streakLastDate);
+      document.getElementById('streak-count').textContent = streakCount;
+    }
+    // Check if streak was broken (missed yesterday)
+    function checkStreakExpiry() {
+      if (streakLastDate && streakLastDate !== todayStr() && streakLastDate !== yesterdayStr()) {
+        streakCount = 0;
+        localStorage.setItem('streakCount', '0');
+      }
+      document.getElementById('streak-count').textContent = streakCount;
+    }
+
     const msgs = {
-      awake: ['Feeling great!', "Let's play!", 'Meow!', 'What a day!'],
-      drowsy: ['*yawn*...', 'Getting sleepy...', 'Bed soon?'],
-      sleepy: ['So tired...', 'Please... bed...', "Can't stay up..."],
-      sleeping: [], waking: ['Good morning!']
+      awake: [
+        "you're doing great today",
+        "proud of you",
+        "take it easy, okay?",
+        "you matter more than you know",
+        "mew~",
+        "just checking in on you",
+        "remember to drink water",
+        "you've got this",
+        "hey, you're enough",
+        "one step at a time",
+        "be gentle with yourself",
+      ],
+      drowsy: [
+        "it's getting late...",
+        "you deserve rest",
+        "wind down a little?",
+        "rest is productive too",
+        "mew... sleepy time soon",
+        "you did enough today",
+      ],
+      sleepy: [
+        "please go to bed",
+        "sleep is important, really",
+        "tomorrow needs you rested",
+        "you'll feel so much better",
+        "zzz... bed... now...",
+      ],
+      sleeping: [], waking: ["good morning~", "mew!"]
     };
 
     function minsTo(ts) {
@@ -292,21 +426,204 @@
       return (t - now) / 60000;
     }
 
+    // Animation cycling — Mochi does random things based on state
+    let idleTimer = null;
+
+    function randomAwakeAnim() {
+      const anims = ['idle', 'idle2', 'waiting', 'dance', 'surprised', 'lick', 'shy'];
+      const weights = [25, 25, 15, 12, 10, 8, 5]; // weighted random
+      let total = weights.reduce((a, b) => a + b, 0);
+      let r = Math.random() * total;
+      for (let i = 0; i < anims.length; i++) {
+        r -= weights[i];
+        if (r <= 0) return anims[i];
+      }
+      return 'idle';
+    }
+
+    // How sleepy should Mochi be? 0 = wide awake, 1 = bedtime
+    function sleepiness() {
+      const mins = minsTo(bedtime);
+      if (mins <= 0) return 1;
+      if (mins >= 120) return 0;
+      return 1 - (mins / 120); // ramps from 0 to 1 over 2 hours
+    }
+
+    function defaultIdle() {
+      const s = sleepiness();
+      if (s > 0.7) return 'sleepy';
+      if (s > 0.3) return Math.random() > 0.4 ? 'idle2' : 'idle';
+      return Math.random() > 0.5 ? 'idle' : 'idle2';
+    }
+
+    function scheduleCycleAnim() {
+      clearTimeout(idleTimer);
+      if (state === 'sleeping' || manualSleep) return;
+
+      const s = sleepiness();
+      // When very sleepy, barely get up at all
+      const delay = s > 0.5 ? 2000 + Math.random() * 3000 : 4000 + Math.random() * 8000;
+
+      idleTimer = setTimeout(() => {
+        if (state === 'sleeping' || manualSleep) return;
+
+        // Lie down probability: aggressive — at s=0.5 already 80%, at s=1 → 97%
+        const lieDownChance = 0.15 + s * 0.82;
+
+        if (Math.random() < lieDownChance) {
+          play('laydown', () => {
+            // Stay down much longer when sleepy: 15-60s+ near bedtime
+            const restTime = Math.max(15000, 12000 + s * 50000 + Math.random() * 15000);
+            setTimeout(() => {
+              if (state === 'sleeping' || manualSleep) return;
+              // When very sleepy, often just stay lying down (re-laydown)
+              if (s > 0.6 && Math.random() < s * 0.8) {
+                play('laydown', () => scheduleCycleAnim());
+                return;
+              }
+              play(defaultIdle());
+              setTimeout(() => scheduleCycleAnim(), 10000 + Math.random() * 5000);
+            }, restTime);
+          });
+          return;
+        }
+
+        // Awake/drowsy animations
+        if (state === 'awake') {
+          const next = randomAwakeAnim();
+          play(next, () => {
+            play(defaultIdle());
+            scheduleCycleAnim();
+          });
+        } else if (state === 'drowsy') {
+          const drowsyAnims = ['sleepy', 'waiting', 'idle2'];
+          const pick = drowsyAnims[Math.floor(Math.random() * drowsyAnims.length)];
+          play(pick, () => {
+            play(defaultIdle());
+            scheduleCycleAnim();
+          });
+        } else if (state === 'sleepy') {
+          play('sleepy', () => {
+            play('sleepy');
+            scheduleCycleAnim();
+          });
+        }
+      }, delay);
+    }
+
+    // ═══════ BEDTIME REMINDERS ═══════
+    let lastReminder = '';
+
+    function checkBedtimeReminders() {
+      if (manualSleep || state === 'sleeping') return;
+      const mins = minsTo(bedtime);
+      let key = '';
+
+      if (mins <= 0 && mins > -5) key = 'now';
+      else if (mins <= 30 && mins > 29) key = '30';
+      else if (mins <= 60 && mins > 59) key = '60';
+      else if (mins <= 120 && mins > 119) key = '120';
+
+      if (key && key !== lastReminder) {
+        lastReminder = key;
+        if (key === '120') {
+          showBubbleMsg("bedtime in 2 hours~");
+          play('sleepy', () => play(defaultIdle()));
+        } else if (key === '60') {
+          showBubbleMsg("1 hour til bed...");
+          play('sleepy', () => { play('idle2'); scheduleCycleAnim(); });
+          window.electronAPI?.notify('Mochi', 'bedtime in 1 hour~');
+        } else if (key === '30') {
+          showBubbleMsg("start winding down...");
+          play('sleepy', () => play('sleepy'));
+          window.electronAPI?.notify('Mochi', 'maybe start thinking about sleep?');
+        } else if (key === 'now') {
+          showBubbleMsg("it's bedtime...");
+          play('sleepy', () => play('laydown', () => play('sleep')));
+          window.electronAPI?.notify('Mochi', 'it\'s bedtime... goodnight?');
+        }
+      }
+    }
+
+    function showBubbleMsg(text) {
+      const b = document.getElementById('bubble');
+      b.textContent = text;
+      b.classList.add('show');
+      clearTimeout(bubbleTimer);
+      bubbleTimer = setTimeout(() => b.classList.remove('show'), 6000);
+    }
+
+    // ═══════ GOODNIGHT CUTSCENE ═══════
+    function goodnightCutscene() {
+      manualSleep = true;
+      clearTimeout(idleTimer);
+      menuOpen = false;
+      document.getElementById('menu').classList.remove('open');
+
+      // Record streak — on time if pressed before bedtime
+      const onTime = minsTo(bedtime) > 0;
+      updateStreak(onTime);
+      if (onTime && streakCount > 1) {
+        showBubbleMsg(streakCount + " nights in a row~ so proud of you");
+      } else if (onTime) {
+        showBubbleMsg("goodnight~ sleep well");
+      } else {
+        showBubbleMsg("better late than never~ sleep well");
+      }
+      play('sleepy', () => {
+        play('laydown', () => {
+          // Step 2: Show room view if not already
+          if (!showingRoom) {
+            showingRoom = true;
+            localStorage.setItem('showRoom', 'true');
+            roomViewCanvas.classList.add('show');
+            canvas.style.display = 'none';
+            document.getElementById('viewroom-btn').textContent = 'Hide Room';
+            loadRoomView();
+          }
+          // Step 3: Sleep
+          play('sleep');
+          state = 'sleeping';
+          document.getElementById('goodnight-btn').textContent = 'Wake Up';
+        });
+      });
+    }
+
+    function wakeUp() {
+      manualSleep = false;
+      state = 'waking';
+      play('excited', () => {
+        state = 'awake';
+        play(defaultIdle());
+        scheduleCycleAnim();
+      });
+      document.getElementById('goodnight-btn').textContent = 'Goodnight';
+      showBubbleMsg("good morning~");
+    }
+
     function setState(s) {
+      if (s === state) return;
       state = s;
       switch (s) {
-        case 'awake': play(Math.random() > 0.5 ? 'idle' : 'idle2'); break;
-        case 'drowsy': play('waiting'); break;
+        case 'awake':
+          play(defaultIdle());
+          scheduleCycleAnim();
+          break;
+        case 'drowsy':
+          play('sleepy', () => { play(defaultIdle()); scheduleCycleAnim(); });
+          break;
         case 'sleepy':
           play('sleepy');
-          window.electronAPI?.notify('Sleepy Pet', 'Mochi is really sleepy! Time for bed!');
+          scheduleCycleAnim();
           break;
-        case 'sleeping': play('laydown', () => play('sleep')); break;
-        case 'waking': play('excited', () => setState('awake')); break;
+        case 'sleeping':
+          clearTimeout(idleTimer);
+          play('laydown', () => play('sleep'));
+          break;
+        case 'waking':
+          play('excited', () => setState('awake'));
+          break;
       }
-      const btn = document.getElementById('bed-btn');
-      btn.textContent = s === 'sleeping' ? 'Wake Up' : 'Go to Bed';
-      btn.classList.toggle('wake', s === 'sleeping');
       showBubble();
     }
 
@@ -315,11 +632,133 @@
       const mins = minsTo(bedtime);
       const s = mins <= 15 ? 'sleepy' : mins <= 60 ? 'drowsy' : 'awake';
       if (s !== state) setState(s);
+      checkBedtimeReminders();
     }
 
     // ═══════ UI ═══════
     let menuOpen = false, activePanel = null, bubbleTimer;
     let followingMouse = localStorage.getItem('followMouse') === 'true';
+    let showingRoom = localStorage.getItem('showRoom') === 'true';
+
+    // ═══════ MINI ROOM VIEW ═══════
+    const roomViewCanvas = document.getElementById('room-view');
+    const rvCtx = roomViewCanvas.getContext('2d');
+    rvCtx.imageSmoothingEnabled = false;
+
+    let roomBgImg = null;
+    let roomViewItems = [];
+
+    function loadRoomView() {
+      const roomNum = parseInt(localStorage.getItem('currentRoom') || '1');
+      const img = new Image();
+      img.onload = () => { roomBgImg = img; };
+      img.src = 'assets/cat-room-paid/CatRoomPaid/Rooms/Room' + roomNum + '.png';
+
+      const saved = localStorage.getItem('roomLayout_' + roomNum);
+      roomViewItems = saved ? JSON.parse(saved) : [];
+    }
+
+    function renderRoomView() {
+      if (!showingRoom) return;
+      const RV = 220;
+      rvCtx.clearRect(0, 0, RV, RV);
+      // Scale 512 → 220
+      if (roomBgImg) rvCtx.drawImage(roomBgImg, 0, 0, 512, 512, 0, 0, RV, RV);
+
+      // Draw placed items (scaled)
+      const scale = RV / 512;
+      for (const item of roomViewItems) {
+        const def = findCatalogItem(item.id);
+        if (!def) continue;
+        ensureDecoImg(def.src);
+        const img = roomItemImgs[def.src];
+        if (!img) continue;
+        const sx = def.cropX || 0, sy = def.cropY || 0;
+        const sw = def.cropW || def.w || img.naturalWidth;
+        const sh = def.cropH || def.h || img.naturalHeight;
+        rvCtx.drawImage(img, sx, sy, sw, sh, item.x * scale, item.y * scale, sw * scale, sh * scale);
+      }
+
+      // Draw Mochi in room (using current animation) — draw at 48px source size for visibility
+      const mochiPos = JSON.parse(localStorage.getItem('mochiPos_' + (localStorage.getItem('currentRoom') || '1')) || '{"x":240,"y":350}');
+      const a = ANIMS[curAnim], img = imgs[curAnim];
+      if (a && img) {
+        const f = Math.max(0, frame - 1);
+        const mochiDraw = 64;
+        rvCtx.drawImage(img, f * S, 0, S, S, mochiPos.x * scale, mochiPos.y * scale, mochiDraw * scale, mochiDraw * scale);
+      }
+    }
+
+    // Mini catalog for room view rendering
+    const DECOS_BASE = 'assets/cat-pack-paid/CatPackPaid/CatItems/Decorations/Individual/';
+    const ROOM_CATALOG = [
+      { id:'bed-blue', src:'assets/cat-pack-paid/CatPackPaid/CatItems/Beds/CatBedBlue.png', w:64,h:64 },
+      { id:'bed-pink', src:'assets/cat-pack-paid/CatPackPaid/CatItems/Beds/CatBedPink.png', w:64,h:64 },
+      { id:'bed-green', src:'assets/cat-pack-paid/CatPackPaid/CatItems/Beds/CatBedGreen.png', w:64,h:64 },
+      { id:'bed-brown', src:'assets/cat-pack-paid/CatPackPaid/CatItems/Beds/CatBedBrown.png', w:64,h:64 },
+      { id:'bed-purple', src:'assets/cat-pack-paid/CatPackPaid/CatItems/Beds/CatBedPurple.png', w:64,h:64 },
+      { id:'bed-red', src:'assets/cat-pack-paid/CatPackPaid/CatItems/Beds/CatBedRed.png', w:64,h:64 },
+      { id:'home-blue', src:'assets/cat-pack-paid/CatPackPaid/CatItems/Beds/CatHomes.png', w:126,h:126, cropX:0,cropY:0,cropW:63,cropH:63 },
+      { id:'home-green', src:'assets/cat-pack-paid/CatPackPaid/CatItems/Beds/CatHomes.png', w:126,h:126, cropX:63,cropY:0,cropW:63,cropH:63 },
+      { id:'home-purple', src:'assets/cat-pack-paid/CatPackPaid/CatItems/Beds/CatHomes.png', w:126,h:126, cropX:0,cropY:63,cropW:63,cropH:63 },
+      { id:'home-brown', src:'assets/cat-pack-paid/CatPackPaid/CatItems/Beds/CatHomes.png', w:126,h:126, cropX:63,cropY:63,cropW:63,cropH:63 },
+      { id:'bowl-green', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/CatBowls.png', w:32,h:32, cropX:0,cropY:0,cropW:16,cropH:16 },
+      { id:'bowl-purple', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/CatBowls.png', w:32,h:32, cropX:16,cropY:0,cropW:16,cropH:16 },
+      { id:'bowl-blue', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/CatBowls.png', w:32,h:32, cropX:0,cropY:16,cropW:16,cropH:16 },
+      { id:'bowl-brown', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/CatBowls.png', w:32,h:32, cropX:16,cropY:16,cropW:16,cropH:16 },
+      { id:'fish-green', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/fish.png', w:32,h:32, cropX:0,cropY:0,cropW:16,cropH:16 },
+      { id:'fish-blue', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/fish.png', w:32,h:32, cropX:16,cropY:0,cropW:16,cropH:16 },
+      { id:'fish-teal', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/fish.png', w:32,h:32, cropX:0,cropY:16,cropW:16,cropH:16 },
+      { id:'fish-gold', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/fish.png', w:32,h:32, cropX:16,cropY:16,cropW:16,cropH:16 },
+      { id:'catfood', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/catfood.png', w:32,h:32 },
+      { id:'scratch-1', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/toyss.png', w:128,h:128, cropX:0,cropY:0,cropW:64,cropH:64 },
+      { id:'scratch-2', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/toyss.png', w:128,h:128, cropX:64,cropY:0,cropW:64,cropH:64 },
+      { id:'scratch-3', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/toyss.png', w:128,h:128, cropX:0,cropY:64,cropW:64,cropH:64 },
+      { id:'scratch-4', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/toyss.png', w:128,h:128, cropX:64,cropY:64,cropW:64,cropH:64 },
+      { id:'toy-cat', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/CatToy.png', w:192,h:32, cropX:0,cropY:0,cropW:32,cropH:32 },
+      { id:'toy-mouse', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/Mouse-Sheet.png', w:158,h:32, cropX:0,cropY:0,cropW:32,cropH:32 },
+      { id:'ball-blue', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/BlueBall-Sheet.png', w:120,h:16, cropX:0,cropY:0,cropW:16,cropH:16 },
+      { id:'ball-orange', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/OrangeBall-Sheet.png', w:120,h:16, cropX:0,cropY:0,cropW:16,cropH:16 },
+      { id:'ball-pink', src:'assets/cat-pack-paid/CatPackPaid/CatItems/CatToys/PinkBall-Sheet.png', w:120,h:16, cropX:0,cropY:0,cropW:16,cropH:16 },
+      { id:'playground', src:'assets/cat-pack-paid/CatPackPaid/CatItems/PlayGrounds/CatPlayGround.png', w:128,h:128 },
+      { id:'playground-light', src:'assets/cat-pack-paid/CatPackPaid/CatItems/PlayGrounds/CatPlayGroundLighter.png', w:128,h:128 },
+    ];
+    const roomItemImgs = {};
+    const roomSrcSet = new Set();
+    for (const item of ROOM_CATALOG) {
+      if (!roomSrcSet.has(item.src)) {
+        roomSrcSet.add(item.src);
+        const img = new Image();
+        img.onload = () => { roomItemImgs[item.src] = img; };
+        img.src = item.src;
+      }
+    }
+
+    function findCatalogItem(id) {
+      const found = ROOM_CATALOG.find(c => c.id === id);
+      if (found) return found;
+      // Decoration items use individual PNGs
+      if (id.startsWith('deco_')) return { id, src: DECOS_BASE + id + '.png' };
+      return null;
+    }
+    // Lazy-load decoration images when needed
+    function ensureDecoImg(src) {
+      if (!roomSrcSet.has(src)) {
+        roomSrcSet.add(src);
+        const img = new Image();
+        img.onload = () => { roomItemImgs[src] = img; };
+        img.src = src;
+      }
+    }
+
+    function toggleRoomView() {
+      showingRoom = !showingRoom;
+      localStorage.setItem('showRoom', showingRoom);
+      roomViewCanvas.classList.toggle('show', showingRoom);
+      canvas.style.display = showingRoom ? 'none' : 'block';
+      document.getElementById('viewroom-btn').textContent = showingRoom ? 'Hide Room' : 'View Room';
+      if (showingRoom) loadRoomView();
+    }
 
     function showBubble() {
       if (menuOpen || activePanel) return;
@@ -330,6 +769,32 @@
       b.classList.add('show');
       clearTimeout(bubbleTimer);
       bubbleTimer = setTimeout(() => b.classList.remove('show'), 4000);
+    }
+
+    // Single click = random animation, double click = menu
+    let clickTimer = null;
+    let clickAnimEnd = 0; // timestamp when click animation should end
+
+    function onCatClick() {
+      if (clickTimer) {
+        // Double click — open menu
+        clearTimeout(clickTimer);
+        clickTimer = null;
+        toggleMenu();
+      } else {
+        // Wait to see if it's a double click
+        clickTimer = setTimeout(() => {
+          clickTimer = null;
+          // Single click — random animation
+          if (state === 'sleeping') return;
+          const randomAnims = ['dead', 'excited', 'waiting', 'surprised', 'idle2', 'dance', 'lick', 'shy', 'refuse', 'despite'];
+          const pick = randomAnims[Math.floor(Math.random() * randomAnims.length)];
+          clearTimeout(idleTimer);
+          play(pick);
+          // Set a deadline — tick() will auto-return to idle after this
+          clickAnimEnd = performance.now() + 5000;
+        }, 250);
+      }
     }
 
     function toggleMenu() {
@@ -352,20 +817,37 @@
       activePanel = null;
     }
 
+    function fmt12(timeStr) {
+      const [h, m] = timeStr.split(':').map(Number);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return h12 + ':' + String(m).padStart(2, '0') + ' ' + ampm;
+    }
+
+    function adjustTime(timeStr, deltaMins) {
+      let [h, m] = timeStr.split(':').map(Number);
+      let total = h * 60 + m + deltaMins;
+      if (total < 0) total += 1440;
+      total = total % 1440;
+      return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+    }
+
     function updateSleepInfo() {
+      document.getElementById('bed-display').textContent = fmt12(bedtime);
+      document.getElementById('alarm-display').textContent = fmt12(alarmTime);
+
       const [bH, bM] = bedtime.split(':').map(Number);
       const [aH, aM] = alarmTime.split(':').map(Number);
       let bed = bH * 60 + bM, alm = aH * 60 + aM;
       if (alm <= bed) alm += 1440;
       const t = alm - bed, h = Math.floor(t / 60), m = t % 60;
       document.getElementById('sleep-dur').textContent = h + 'h ' + m + 'm';
-      document.getElementById('bar-fill').style.width = Math.min((t / 480) * 100, 100) + '%';
+      document.getElementById('bar-fill').style.width = Math.min((t / 420) * 100, 100) + '%';
       let color, text;
-      if (t < 360) { color = '#FF6B6B'; text = 'Too little'; }
-      else if (t < 420) { color = '#FFA76B'; text = 'Need more'; }
-      else if (t < 480) { color = '#FFD96B'; text = 'Almost'; }
-      else if (t <= 540) { color = '#6BFFB8'; text = 'Perfect'; }
-      else { color = '#6BB8FF'; text = 'A lot'; }
+      if (t < 300) { color = '#FF6B6B'; text = 'not enough'; }
+      else if (t < 360) { color = '#FFA76B'; text = 'could be more'; }
+      else if (t < 420) { color = '#FFD96B'; text = 'almost there'; }
+      else { color = '#6BFFB8'; text = 'perfect'; }
       document.getElementById('bar-fill').style.background = color;
       const q = document.getElementById('sleep-qual');
       q.textContent = text; q.style.color = color;
@@ -483,32 +965,42 @@
     function init() {
       setupClickThrough();
 
-      document.getElementById('bedtime').value = bedtime;
-      document.getElementById('alarm').value = alarmTime;
-      document.getElementById('bedtime').onchange = e => {
-        bedtime = e.target.value; localStorage.setItem('bedtime', bedtime);
-        updateSleepInfo(); if (!manualSleep) checkState();
-      };
-      document.getElementById('alarm').onchange = e => {
-        alarmTime = e.target.value; localStorage.setItem('alarm', alarmTime);
-        updateSleepInfo();
-      };
-      document.getElementById('bed-btn').onclick = () => {
-        if (state === 'sleeping') { manualSleep = false; setState('waking'); }
-        else { manualSleep = true; setState('sleeping'); }
-      };
+      // Time picker +/- buttons (15 min increments)
+      document.querySelectorAll('.time-btn').forEach(btn => {
+        btn.onclick = () => {
+          const target = btn.dataset.target;
+          const dir = parseInt(btn.dataset.dir);
+          if (target === 'bedtime') {
+            bedtime = adjustTime(bedtime, dir * 15);
+            localStorage.setItem('bedtime', bedtime);
+          } else {
+            alarmTime = adjustTime(alarmTime, dir * 15);
+            localStorage.setItem('alarm', alarmTime);
+          }
+          updateSleepInfo();
+          if (!manualSleep) checkState();
+        };
+      });
 
-      // Cat click
-      canvas.addEventListener('click', toggleMenu);
+      // Cat click — single = random anim, double = menu
+      canvas.addEventListener('click', onCatClick);
+      roomViewCanvas.addEventListener('dblclick', () => toggleMenu());
 
       // Menu buttons
       document.querySelectorAll('.menu-btn').forEach(btn => {
         btn.onclick = () => {
           const action = btn.dataset.action;
-          if (action === 'room') {
+          if (action === 'goodnight') {
+            if (state === 'sleeping' || manualSleep) { wakeUp(); }
+            else { goodnightCutscene(); }
+          } else if (action === 'room') {
             menuOpen = false;
             document.getElementById('menu').classList.remove('open');
             window.electronAPI?.openRoom();
+          } else if (action === 'viewroom') {
+            menuOpen = false;
+            document.getElementById('menu').classList.remove('open');
+            toggleRoomView();
           } else if (action === 'follow') {
             menuOpen = false;
             document.getElementById('menu').classList.remove('open');
@@ -516,6 +1008,8 @@
             localStorage.setItem('followMouse', followingMouse);
             btn.textContent = followingMouse ? 'Stop Following' : 'Follow Mouse';
             window.electronAPI?.toggleFollow(followingMouse);
+            if (followingMouse && state !== 'sleeping') { play('excited'); clearTimeout(idleTimer); }
+            else if (!followingMouse) { catFlip = false; play(defaultIdle()); scheduleCycleAnim(); }
           } else {
             openPanel(action + '-panel');
           }
@@ -537,11 +1031,69 @@
         window.electronAPI?.toggleFollow(true);
       }
 
+      // Listen for stop-follow from main process (Escape key or tray)
+      window.electronAPI?.onStopFollow?.(() => {
+        followingMouse = false;
+        catFlip = false;
+        localStorage.setItem('followMouse', false);
+        document.getElementById('follow-btn').textContent = 'Follow Mouse';
+        play(defaultIdle());
+        scheduleCycleAnim();
+      });
+
+      // Listen for cursor direction during follow mode to flip cat
+      window.electronAPI?.onCursorDir?.((dir) => {
+        if (followingMouse) catFlip = (dir === 'left');
+      });
+
+      // Restore room view state
+      if (showingRoom) {
+        roomViewCanvas.classList.add('show');
+        canvas.style.display = 'none';
+        document.getElementById('viewroom-btn').textContent = 'Hide Room';
+        loadRoomView();
+      }
+
+      // Room view: drag to reposition, click to open editor
+      let rvDragging = false, rvStartX, rvStartY, rvOrigLeft, rvOrigTop, rvMoved;
+      roomViewCanvas.addEventListener('mousedown', (e) => {
+        rvDragging = true; rvMoved = false;
+        rvStartX = e.clientX; rvStartY = e.clientY;
+        rvOrigLeft = roomViewCanvas.offsetLeft; rvOrigTop = roomViewCanvas.offsetTop;
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove', (e) => {
+        if (!rvDragging) return;
+        const dx = e.clientX - rvStartX, dy = e.clientY - rvStartY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) rvMoved = true;
+        roomViewCanvas.style.left = (rvOrigLeft + dx) + 'px';
+        roomViewCanvas.style.top = (rvOrigTop + dy) + 'px';
+        roomViewCanvas.style.right = 'auto';
+        roomViewCanvas.style.bottom = 'auto';
+      });
+      document.addEventListener('mouseup', () => { rvDragging = false; });
+      roomViewCanvas.addEventListener('click', (e) => {
+        if (rvMoved) { rvMoved = false; return; }
+        window.electronAPI?.openRoom();
+      });
+
+      // Periodic room view refresh (picks up changes from editor)
+      setInterval(() => {
+        if (showingRoom) { loadRoomView(); renderRoomView(); }
+      }, 2000);
+
+      // Check if bedtime has not been set yet — prompt
+      if (!localStorage.getItem('bedtime')) {
+        setTimeout(() => showBubbleMsg("when do you go to bed? tell me in settings~"), 3000);
+      }
+
+      checkStreakExpiry();
       setState('awake');
+      checkState(); // immediately check where we are relative to bedtime
       requestAnimationFrame(tick);
 
-      setInterval(showBubble, 10000);
-      setInterval(checkState, 30000);
+      setInterval(showBubble, 90000);
+      setInterval(checkState, 15000); // check more often for bedtime reminders
     }
   </script>
 </body>
