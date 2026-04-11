@@ -178,6 +178,7 @@
     <button class="menu-btn" data-action="inv">Inventory</button>
     <button class="menu-btn" data-action="follow" id="follow-btn">Follow Mouse</button>
     <button class="menu-btn" data-action="hide">Hide Mochi</button>
+    <button class="menu-btn" data-action="quit">Quit</button>
   </div>
 
   <!-- Settings -->
@@ -257,6 +258,7 @@
       shy:       { src: BASE+'Shy.png', frames: 9, speed: 160 },
       refuse:    { src: BASE+'Refuse.png', frames: 12, speed: 140 },
       despite:   { src: BASE+'Despite.png', frames: 4, speed: 200 },
+      sick:      { src: BASE+'catsick1.png', frames: 5, speed: 300 },
     };
 
     const imgs = {};
@@ -288,18 +290,55 @@
     let selectedSkin = localStorage.getItem('selectedSkin') || null;
     let ribbonAtlasImg = null, skinAtlasImg = null;
 
+    function syncInventorySelectionUI() {
+      document.querySelectorAll('#ribbon-grid .inv-item').forEach((el) => {
+        el.classList.toggle('sel', (el.dataset.ribbon || 'none') === (selectedRibbon || 'none'));
+      });
+      document.querySelectorAll('#skin-grid .inv-item').forEach((el) => {
+        el.classList.toggle('sel', (el.dataset.skin || 'classic') === (selectedSkin || 'classic'));
+      });
+    }
+
     function loadAtlas(type, file) {
       if (type === 'ribbon') {
-        if (!file) { ribbonAtlasImg = null; selectedRibbon = null; localStorage.removeItem('selectedRibbon'); updateInvPreview(); return; }
+        if (file) {
+          skinAtlasImg = null;
+          selectedSkin = null;
+          localStorage.removeItem('selectedSkin');
+        }
+        if (!file) {
+          ribbonAtlasImg = null;
+          selectedRibbon = null;
+          localStorage.removeItem('selectedRibbon');
+          syncInventorySelectionUI();
+          updateInvPreview();
+          return;
+        }
         selectedRibbon = file;
         localStorage.setItem('selectedRibbon', file);
+        syncInventorySelectionUI();
+        updateInvPreview();
         const img = new Image();
         img.onload = () => { ribbonAtlasImg = img; updateInvPreview(); };
         img.src = 'assets/cat-pack-paid/CatPackPaid/Sprites/CatwithRibbon/CatPackRibbon' + file + '.png';
       } else {
-        if (!file) { skinAtlasImg = null; selectedSkin = null; localStorage.removeItem('selectedSkin'); updateInvPreview(); return; }
+        if (file) {
+          ribbonAtlasImg = null;
+          selectedRibbon = null;
+          localStorage.removeItem('selectedRibbon');
+        }
+        if (!file) {
+          skinAtlasImg = null;
+          selectedSkin = null;
+          localStorage.removeItem('selectedSkin');
+          syncInventorySelectionUI();
+          updateInvPreview();
+          return;
+        }
         selectedSkin = file;
         localStorage.setItem('selectedSkin', file);
+        syncInventorySelectionUI();
+        updateInvPreview();
         const img = new Image();
         img.onload = () => { skinAtlasImg = img; updateInvPreview(); };
         img.src = 'assets/cat-pack-paid/CatPackPaid/CatPackDifferentSkins/' + file;
@@ -437,9 +476,17 @@
         "you'll feel so much better",
         "zzz... bed... now...",
       ],
+      overtired: [
+        "i don't feel so good...",
+        "please... sleep...",
+        "mew... everything hurts...",
+        "i'm so tired...",
+        "why are we still up...",
+      ],
       sleeping: [], waking: ["good morning~", "mew!"]
     };
 
+    // Minutes until a given time (always positive, wraps around midnight)
     function minsTo(ts) {
       const [h, m] = ts.split(':').map(Number);
       const now = new Date(), t = new Date();
@@ -447,6 +494,33 @@
       if (t <= now) t.setDate(t.getDate() + 1);
       return (t - now) / 60000;
     }
+
+    // Minutes since bedtime (0 if not in the post-bedtime window)
+    // Only counts within 8 hours of bedtime — after that it's "the next day"
+    function minsSinceBedtime() {
+      const minsToBed = minsTo(bedtime);
+      const since = 1440 - minsToBed;
+      return since >= 0 && since <= 480 ? since : 0;
+    }
+
+    // Whether bedtime has already passed today (we're in the post-bedtime window)
+    function isPastBedtime() {
+      return minsSinceBedtime() > 0;
+    }
+
+    // Overtired: 10 mins to 2 hours after bedtime (sick animation window)
+    function isOvertired() {
+      const since = minsSinceBedtime();
+      return since >= 10 && since <= 240;
+    }
+
+    // Missed bedtime: more than 4 hours past bedtime but still within the night window
+    let missedBedtimeAcknowledged = false;
+    function hasMissedBedtime() {
+      const since = minsSinceBedtime();
+      return since > 240 && since <= 480;
+    }
+
 
     // Animation cycling — Mochi does random things based on state
     let idleTimer = null;
@@ -465,8 +539,8 @@
 
     // How sleepy should Mochi be? 0 = wide awake, 1 = bedtime
     function sleepiness() {
+      if (isPastBedtime()) return 1; // already past bedtime
       const mins = minsTo(bedtime);
-      if (mins <= 0) return 1;
       if (mins >= 120) return 0;
       return 1 - (mins / 120); // ramps from 0 to 1 over 2 hours
     }
@@ -479,14 +553,14 @@
 
     function scheduleCycleAnim() {
       clearTimeout(idleTimer);
-      if (state === 'sleeping' || manualSleep) return;
+      if (state === 'sleeping' || manualSleep || followingMouse) return;
 
       const s = sleepiness();
       // When very sleepy, barely get up at all
       const delay = s > 0.5 ? 2000 + Math.random() * 3000 : 4000 + Math.random() * 8000;
 
       idleTimer = setTimeout(() => {
-        if (state === 'sleeping' || manualSleep) return;
+        if (state === 'sleeping' || manualSleep || followingMouse) return;
 
         // Lie down probability: aggressive — at s=0.5 already 80%, at s=1 → 97%
         const lieDownChance = 0.15 + s * 0.82;
@@ -496,7 +570,7 @@
             // Stay down much longer when sleepy: 15-60s+ near bedtime
             const restTime = Math.max(15000, 12000 + s * 50000 + Math.random() * 15000);
             setTimeout(() => {
-              if (state === 'sleeping' || manualSleep) return;
+              if (state === 'sleeping' || manualSleep || followingMouse) return;
               // When very sleepy, often just stay lying down (re-laydown)
               if (s > 0.6 && Math.random() < s * 0.8) {
                 play('laydown', () => scheduleCycleAnim());
@@ -537,10 +611,11 @@
 
     function checkBedtimeReminders() {
       if (manualSleep || state === 'sleeping') return;
+      const since = minsSinceBedtime();
       const mins = minsTo(bedtime);
       let key = '';
 
-      if (mins <= 0 && mins > -5) key = 'now';
+      if (since > 0 && since <= 5) key = 'now';
       else if (mins <= 30 && mins > 29) key = '30';
       else if (mins <= 60 && mins > 59) key = '60';
       else if (mins <= 120 && mins > 119) key = '120';
@@ -567,6 +642,7 @@
     }
 
     function showBubbleMsg(text) {
+      if (mochiHidden) return;
       const b = document.getElementById('bubble');
       b.textContent = text;
       b.classList.add('show');
@@ -581,8 +657,8 @@
       menuOpen = false;
       document.getElementById('menu').classList.remove('open');
 
-      // Record streak — on time if pressed before bedtime
-      const onTime = minsTo(bedtime) > 0;
+      // Record streak — on time if pressed before or within 10 mins of bedtime
+      const onTime = !isPastBedtime() || minsSinceBedtime() <= 10;
       updateStreak(onTime);
       if (onTime && streakCount > 1) {
         showBubbleMsg(streakCount + " nights in a row~ so proud of you");
@@ -641,6 +717,10 @@
           clearTimeout(idleTimer);
           play('laydown', () => play('sleep'));
           break;
+        case 'overtired':
+          clearTimeout(idleTimer);
+          play('sick');
+          break;
         case 'waking':
           play('excited', () => setState('awake'));
           break;
@@ -649,9 +729,42 @@
     }
 
     function checkState() {
-      if (manualSleep) return;
-      const mins = minsTo(bedtime);
-      const s = mins <= 15 ? 'sleepy' : mins <= 60 ? 'drowsy' : 'awake';
+      if (manualSleep || followingMouse) return;
+      // Sick animation: 10 mins to 2 hours after bedtime
+      if (isOvertired()) {
+        if (state !== 'overtired') setState('overtired');
+        checkBedtimeReminders();
+        return;
+      }
+
+      // Missed bedtime: past the sick window, goodnight was never pressed
+      // Also handles transition out of overtired state
+      if ((hasMissedBedtime() || (state === 'overtired' && !isOvertired())) && !missedBedtimeAcknowledged) {
+        missedBedtimeAcknowledged = true;
+        updateStreak(false); // break the streak
+        state = 'awake';
+        play('waiting', () => {
+          showBubbleMsg("you missed bedtime... please sleep tonight");
+          play(defaultIdle());
+          scheduleCycleAnim();
+        });
+        return;
+      }
+
+      // Reset the missed flag when we're approaching bedtime again (new day cycle)
+      if (minsTo(bedtime) <= 120) {
+        missedBedtimeAcknowledged = false;
+      }
+
+      // First 10 mins past bedtime = still sleepy state
+      const since = minsSinceBedtime();
+      let s;
+      if (since > 0 && since <= 10) {
+        s = 'sleepy';
+      } else {
+        const mins = minsTo(bedtime);
+        s = mins <= 15 ? 'sleepy' : mins <= 60 ? 'drowsy' : 'awake';
+      }
       if (s !== state) setState(s);
       checkBedtimeReminders();
     }
@@ -660,6 +773,22 @@
     let menuOpen = false, activePanel = null, bubbleTimer;
     let followingMouse = localStorage.getItem('followMouse') === 'true';
     let showingRoom = localStorage.getItem('showRoom') === 'true';
+
+    function applyFollowState(enabled) {
+      const changed = followingMouse !== enabled;
+      followingMouse = enabled;
+      localStorage.setItem('followMouse', String(enabled));
+      document.getElementById('follow-btn').textContent = enabled ? 'Stop Following' : 'Follow Mouse';
+      if (!changed) return;
+      if (enabled) {
+        clearTimeout(idleTimer);
+        if (state !== 'sleeping') play('excited');
+      } else {
+        catFlip = false;
+        play(defaultIdle());
+        scheduleCycleAnim();
+      }
+    }
 
     // ═══════ MINI ROOM VIEW ═══════
     const roomViewCanvas = document.getElementById('room-view');
@@ -782,7 +911,7 @@
     }
 
     function showBubble() {
-      if (menuOpen || activePanel) return;
+      if (mochiHidden || menuOpen || activePanel) return;
       const m = msgs[state];
       if (!m?.length) { document.getElementById('bubble').classList.remove('show'); return; }
       const b = document.getElementById('bubble');
@@ -926,11 +1055,10 @@
 
       // None option for ribbons
       const rNone = document.createElement('div');
-      rNone.className = 'inv-item' + (!selectedRibbon ? ' sel' : '');
+      rNone.className = 'inv-item';
+      rNone.dataset.ribbon = 'none';
       rNone.innerHTML = '<span class="inv-none">None</span>';
       rNone.onclick = () => {
-        document.querySelectorAll('#ribbon-grid .inv-item').forEach(e => e.classList.remove('sel'));
-        rNone.classList.add('sel');
         loadAtlas('ribbon', null);
       };
       rg.appendChild(rNone);
@@ -938,7 +1066,8 @@
       for (const rb of RIBBONS) {
         const item = document.createElement('div');
         const locked = !isUnlocked(rb.streak);
-        item.className = 'inv-item' + (selectedRibbon === rb.color ? ' sel' : '') + (locked ? ' locked' : '');
+        item.className = 'inv-item' + (locked ? ' locked' : '');
+        item.dataset.ribbon = rb.color;
         const thumb = document.createElement('canvas');
         thumb.width = 32; thumb.height = 32;
         item.appendChild(thumb);
@@ -957,8 +1086,6 @@
 
         item.onclick = () => {
           if (locked) return;
-          document.querySelectorAll('#ribbon-grid .inv-item').forEach(e => e.classList.remove('sel'));
-          item.classList.add('sel');
           loadAtlas('ribbon', rb.color);
         };
         rg.appendChild(item);
@@ -968,9 +1095,9 @@
       const sg = document.getElementById('skin-grid');
       for (const skin of SKINS) {
         const item = document.createElement('div');
-        const isSel = skin.file ? selectedSkin === skin.file : !selectedSkin;
         const locked = !isUnlocked(skin.streak);
-        item.className = 'inv-item' + (isSel ? ' sel' : '') + (locked ? ' locked' : '');
+        item.className = 'inv-item' + (locked ? ' locked' : '');
+        item.dataset.skin = skin.file || 'classic';
 
         if (skin.file) {
           const thumb = document.createElement('canvas');
@@ -999,12 +1126,12 @@
 
         item.onclick = () => {
           if (locked) return;
-          document.querySelectorAll('#skin-grid .inv-item').forEach(e => e.classList.remove('sel'));
-          item.classList.add('sel');
           loadAtlas('skin', skin.file);
         };
         sg.appendChild(item);
       }
+
+      syncInventorySelectionUI();
 
       // Load saved selections (only if still unlocked)
       if (selectedRibbon && isUnlocked(RIBBONS.find(r => r.color === selectedRibbon)?.streak || 0)) {
@@ -1037,7 +1164,6 @@
 
       // Cat click — single = random anim, double = menu
       canvas.addEventListener('click', onCatClick);
-      roomViewCanvas.addEventListener('dblclick', () => toggleMenu());
 
       // Menu buttons
       document.querySelectorAll('.menu-btn').forEach(btn => {
@@ -1061,12 +1187,9 @@
           } else if (action === 'follow') {
             menuOpen = false;
             document.getElementById('menu').classList.remove('open');
-            followingMouse = !followingMouse;
-            localStorage.setItem('followMouse', followingMouse);
-            btn.textContent = followingMouse ? 'Stop Following' : 'Follow Mouse';
-            window.electronAPI?.toggleFollow(followingMouse);
-            if (followingMouse && state !== 'sleeping') { play('excited'); clearTimeout(idleTimer); }
-            else if (!followingMouse) { catFlip = false; play(defaultIdle()); scheduleCycleAnim(); }
+            window.electronAPI?.toggleFollow(!followingMouse);
+          } else if (action === 'quit') {
+            window.electronAPI?.quit();
           } else {
             openPanel(action + '-panel');
           }
@@ -1088,14 +1211,12 @@
         window.electronAPI?.toggleFollow(true);
       }
 
-      // Listen for stop-follow from main process (Escape key or tray)
+      // Follow mode is owned by the main process so tray/menu/shortcut stay in sync
+      window.electronAPI?.onFollowState?.((enabled) => {
+        applyFollowState(enabled);
+      });
       window.electronAPI?.onStopFollow?.(() => {
-        followingMouse = false;
-        catFlip = false;
-        localStorage.setItem('followMouse', false);
-        document.getElementById('follow-btn').textContent = 'Follow Mouse';
-        play(defaultIdle());
-        scheduleCycleAnim();
+        applyFollowState(false);
       });
 
       // Listen for cursor direction during follow mode to flip cat
@@ -1116,6 +1237,13 @@
         }
       });
 
+      // Cmd+Shift+M shortcut opens the cat's menu
+      window.electronAPI?.onOpenMenu?.(() => {
+        if (!menuOpen && !activePanel) {
+          toggleMenu();
+        }
+      });
+
       // Restore room view state
       if (showingRoom) {
         roomViewCanvas.classList.add('show');
@@ -1124,8 +1252,9 @@
         loadRoomView();
       }
 
-      // Room view: drag to reposition, click to open editor
+      // Room view: drag to reposition; single click = menu (after delay), double click = editor (same timing as cat)
       let rvDragging = false, rvStartX, rvStartY, rvOrigLeft, rvOrigTop, rvMoved;
+      let roomViewClickTimer = null;
       roomViewCanvas.addEventListener('mousedown', (e) => {
         rvDragging = true; rvMoved = false;
         rvStartX = e.clientX; rvStartY = e.clientY;
@@ -1142,9 +1271,18 @@
         roomViewCanvas.style.bottom = 'auto';
       });
       document.addEventListener('mouseup', () => { rvDragging = false; });
-      roomViewCanvas.addEventListener('click', (e) => {
+      roomViewCanvas.addEventListener('click', () => {
         if (rvMoved) { rvMoved = false; return; }
-        window.electronAPI?.openRoom();
+        if (roomViewClickTimer) {
+          clearTimeout(roomViewClickTimer);
+          roomViewClickTimer = null;
+          window.electronAPI?.openRoom();
+        } else {
+          roomViewClickTimer = setTimeout(() => {
+            roomViewClickTimer = null;
+            toggleMenu();
+          }, 250);
+        }
       });
 
       // Periodic room view refresh (picks up changes from editor)

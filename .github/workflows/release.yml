@@ -30,10 +30,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Inject update token
-        run: node -e "const fs=require('fs');const f='main.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('__UPDATE_TOKEN__','${{ secrets.UPDATE_TOKEN }}'))"
-
       - name: Build for ${{ matrix.platform }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder --${{ matrix.platform }} --publish always

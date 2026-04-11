@@ -1,11 +1,11 @@
 {
   "name": "sleepy-pet",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A kawaii desktop pet that helps you get to bed on time",
   "author": "Liam",
   "main": "main.js",
   "scripts": {
-    "start": "ELECTRON_RUN_AS_NODE= electron .",
+    "start": "cross-env ELECTRON_RUN_AS_NODE= electron .",
     "dist": "node node_modules/electron-builder/cli.js --mac",
     "dist:win": "node node_modules/electron-builder/cli.js --win",
     "dist:all": "node node_modules/electron-builder/cli.js --mac --win"
@@ -15,8 +15,10 @@
     "productName": "Sleepy Pet",
     "mac": {
       "category": "public.app-category.lifestyle",
-      "target": ["dmg", "zip"],
-      "identity": null
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
       "target": "nsis"
@@ -33,10 +35,11 @@
       "provider": "github",
       "owner": "LDCODES12",
       "repo": "sleepy-pet",
-      "private": true
+      "private": false
     }
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "electron": "^33.0.0",
     "electron-builder": "^26.8.1"
   },

@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleFollow: (enabled) => ipcRenderer.send('toggle-follow', enabled),
   hideMochi: () => ipcRenderer.send('hide-mochi'),
   onStopFollow: (cb) => ipcRenderer.on('stop-follow', cb),
+  onFollowState: (cb) => ipcRenderer.on('follow-state', (_, enabled) => cb(enabled)),
   onCursorDir: (cb) => ipcRenderer.on('cursor-dir', (_, dir) => cb(dir)),
-  onMochiVisible: (cb) => ipcRenderer.on('mochi-visible', (_, visible) => cb(visible))
+  onMochiVisible: (cb) => ipcRenderer.on('mochi-visible', (_, visible) => cb(visible)),
+  onOpenMenu: (cb) => ipcRenderer.on('open-menu', cb)
 });

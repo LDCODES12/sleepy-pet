@@ -390,7 +390,7 @@ let mochiX = 240, mochiY = 350, mochiTargetX = null, mochiTargetY = null, mochiF
 
 // ═══════ FOOD BOWL STATE ═══════
 // Bowl fullness: stored per-room in localStorage
-// Key: bowlState_{roomNum} = { "itemIndex": fullness (0-1) }
+// Key: bowlState_{roomNum} = { "itemInstanceId": fullness (0-1) }
 function getBowlStates() {
   const s = localStorage.getItem('bowlState_' + currentRoom);
   return s ? JSON.parse(s) : {};
@@ -400,6 +400,52 @@ function saveBowlStates(states) {
 }
 function isBowlItem(id) {
   return id && id.startsWith('bowl-');
+}
+
+let nextItemInstanceId = 0;
+function makeItemInstanceId() {
+  return 'item-' + Date.now().toString(36) + '-' + (nextItemInstanceId++).toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+function ensureItemInstanceId(item) {
+  if (!item.instanceId) item.instanceId = makeItemInstanceId();
+  return item.instanceId;
+}
+function getBowlStateKey(item, fallbackIndex) {
+  return ensureItemInstanceId(item) || String(fallbackIndex);
+}
+function pruneBowlStates(items) {
+  const states = getBowlStates();
+  const validKeys = new Set(
+    items
+      .filter((item) => isBowlItem(item.id))
+      .map((item, index) => getBowlStateKey(item, index))
+  );
+  let changed = false;
+  for (const key of Object.keys(states)) {
+    if (!validKeys.has(key)) {
+      delete states[key];
+      changed = true;
+    }
+  }
+  if (changed) saveBowlStates(states);
+}
+function migrateLegacyBowlStates(items) {
+  const states = getBowlStates();
+  const migrated = {};
+  let changed = false;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const key = getBowlStateKey(item, i);
+    if (Object.prototype.hasOwnProperty.call(states, key)) {
+      migrated[key] = states[key];
+    } else if (Object.prototype.hasOwnProperty.call(states, String(i))) {
+      migrated[key] = states[String(i)];
+      changed = true;
+    }
+  }
+  if (changed || Object.keys(states).some((key) => /^\d+$/.test(key))) {
+    saveBowlStates(migrated);
+  }
 }
 
 // ═══════ AUTONOMOUS MOCHI (Play Mode) ═══════
@@ -430,7 +476,7 @@ function startAutoWander() {
         if (interact === 'eat' && isBowlItem(item.id)) {
           // Eat from bowl — deplete it
           const states = getBowlStates();
-          const key = '' + idx;
+          const key = getBowlStateKey(item, idx);
           const fullness = states[key] !== undefined ? states[key] : 1;
           if (fullness > 0) {
             mochiPlay('eating', () => {
@@ -511,10 +557,22 @@ function loadRoom(num) {
 }
 function loadRoomLayout() {
   const s = localStorage.getItem('roomLayout_' + currentRoom);
-  roomLayouts[currentRoom] = s ? JSON.parse(s) : [];
+  const items = s ? JSON.parse(s) : [];
+  let changed = false;
+  for (const item of items) {
+    if (!item.instanceId) {
+      ensureItemInstanceId(item);
+      changed = true;
+    }
+  }
+  roomLayouts[currentRoom] = items;
+  migrateLegacyBowlStates(items);
+  if (changed) saveRoomLayout();
 }
 function saveRoomLayout() {
-  localStorage.setItem('roomLayout_' + currentRoom, JSON.stringify(roomLayouts[currentRoom] || []));
+  const items = roomLayouts[currentRoom] || [];
+  localStorage.setItem('roomLayout_' + currentRoom, JSON.stringify(items));
+  pruneBowlStates(items);
 }
 function getPlacedItems() { return roomLayouts[currentRoom] || []; }
 
@@ -554,12 +612,12 @@ function render(t) {
   for (let i = 0; i < placedItems.length; i++) {
     const item = placedItems[i];
     const dims = getItemDims(item);
-    const idx = i;
+    const bowlKey = getBowlStateKey(item, i);
     drawables.push({ y: item.y + dims.h, draw: () => {
       drawItem(rctx, item, item.x, item.y);
       // Draw bowl fullness indicator
       if (isBowlItem(item.id)) {
-        const fullness = bowlStates['' + idx] !== undefined ? bowlStates['' + idx] : 1;
+        const fullness = bowlStates[bowlKey] !== undefined ? bowlStates[bowlKey] : 1;
         if (fullness < 1) {
           // Draw a small bar under the bowl
           const bw = dims.w, bx = item.x, by = item.y + dims.h + 2;
@@ -761,7 +819,7 @@ document.addEventListener('mouseup', (e) => {
       items[dragExistingIdx].y = py;
     } else {
       const items = getPlacedItems();
-      items.push({ id: dragging.id, x: px, y: py });
+      items.push({ id: dragging.id, x: px, y: py, instanceId: makeItemInstanceId() });
       roomLayouts[currentRoom] = items;
     }
     saveRoomLayout();
@@ -792,7 +850,7 @@ roomCanvas.addEventListener('click', (e) => {
         // Bowl: click to refill if empty, otherwise Mochi goes to eat
         if (isBowlItem(item.id)) {
           const states = getBowlStates();
-          const key = '' + i;
+          const key = getBowlStateKey(item, i);
           const fullness = states[key] !== undefined ? states[key] : 1;
           if (fullness <= 0) {
             // Refill the bowl

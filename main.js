@@ -16,12 +16,15 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
 
-  // Auto-update from GitHub releases (token injected by CI for private repo)
-  const updateToken = '__UPDATE_TOKEN__';
-  if (updateToken && !updateToken.startsWith('__')) process.env.GH_TOKEN = updateToken;
+  // Auto-update from public GitHub releases
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+
+  // Global shortcut: Cmd+Shift+M opens Mochi's in-app menu
+  globalShortcut.register('CommandOrControl+Shift+M', () => {
+    mainWindow?.webContents.send('open-menu');
+  });
 });
 
 function createWindow() {
@@ -91,10 +94,7 @@ function updateTrayMenu() {
       else { hideMochi(); }
     }},
     { label: followMouse ? 'Stop Following' : 'Follow Mouse', click: () => {
-      followMouse = !followMouse;
-      if (followMouse) startFollowMouse(); else { stopFollowMouse(); resetPosition(); }
-      mainWindow?.webContents.send('stop-follow');
-      updateTrayMenu();
+      setFollowMouseEnabled(!followMouse, { resetPositionOnStop: true });
     }},
     { label: 'Reset Position', click: resetPosition },
     { type: 'separator' },
@@ -186,24 +186,31 @@ function stopFollowMouse() {
   if (followInterval) { clearInterval(followInterval); followInterval = null; }
 }
 
-ipcMain.on('toggle-follow', (_, enabled) => {
+function broadcastFollowState() {
+  mainWindow?.webContents.send('follow-state', followMouse);
+}
+
+function setFollowMouseEnabled(enabled, { resetPositionOnStop = false } = {}) {
   followMouse = enabled;
   if (enabled) {
     startFollowMouse();
-    // Register Escape to stop following
-    try { globalShortcut.register('Escape', () => {
-      followMouse = false;
-      stopFollowMouse();
-      resetPosition();
-      mainWindow?.webContents.send('stop-follow');
-      updateTrayMenu();
+    try {
       globalShortcut.unregister('Escape');
-    }); } catch {}
+      globalShortcut.register('Escape', () => {
+        setFollowMouseEnabled(false, { resetPositionOnStop: true });
+      });
+    } catch {}
   } else {
     stopFollowMouse();
     try { globalShortcut.unregister('Escape'); } catch {}
+    if (resetPositionOnStop) resetPosition();
   }
+  broadcastFollowState();
   updateTrayMenu();
+}
+
+ipcMain.on('toggle-follow', (_, enabled) => {
+  setFollowMouseEnabled(enabled, { resetPositionOnStop: !enabled });
 });
 
 ipcMain.on('open-room', () => createRoomWindow());
@@ -213,4 +220,5 @@ ipcMain.on('notify', (_, { title, body }) => {
   if (Notification.isSupported()) new Notification({ title, body, silent: false }).show();
 });
 
+app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', (e) => e.preventDefault());
