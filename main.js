@@ -1,11 +1,13 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain, Notification, globalShortcut } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const { createMacUpdater } = require('./mac-updater');
 const path = require('path');
 
 let mainWindow;
 let roomWindow;
 let tray;
 let mochiHidden = false;
+let macUpdater;
 
 // Window large enough for room view (340x440) but starts showing only the cat
 const WIN_W = 340;
@@ -16,16 +18,33 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
 
-  // Auto-update from public GitHub releases
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  setupAutoUpdates();
 
   // Global shortcut: Cmd+Shift+M opens Mochi's in-app menu
   globalShortcut.register('CommandOrControl+Shift+M', () => {
     mainWindow?.webContents.send('open-menu');
   });
 });
+
+function setupAutoUpdates() {
+  if (process.platform === 'darwin') {
+    macUpdater = createMacUpdater({
+      app,
+      Notification,
+      onStateChange: updateTrayMenu
+    });
+    setTimeout(() => {
+      macUpdater.checkForUpdates({ silent: false }).catch(() => {});
+    }, 3000);
+    return;
+  }
+
+  // Auto-update from public GitHub releases on platforms where electron-updater
+  // does not require Apple/Squirrel code-signature validation.
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+}
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -88,7 +107,10 @@ function createTrayIcon() {
 }
 
 function updateTrayMenu() {
-  tray.setContextMenu(Menu.buildFromTemplate([
+  if (!tray) return;
+
+  const macUpdateState = macUpdater?.getState();
+  const items = [
     { label: mochiHidden ? 'Show Mochi' : 'Hide Mochi', click: () => {
       if (mochiHidden) { showMochi(); }
       else { hideMochi(); }
@@ -96,10 +118,30 @@ function updateTrayMenu() {
     { label: followMouse ? 'Stop Following' : 'Follow Mouse', click: () => {
       setFollowMouseEnabled(!followMouse, { resetPositionOnStop: true });
     }},
-    { label: 'Reset Position', click: resetPosition },
+    { label: 'Reset Position', click: resetPosition }
+  ];
+
+  if (macUpdateState?.status === 'ready') {
+    items.push(
+      { type: 'separator' },
+      {
+        label: `Restart to Update ${macUpdateState.version}`,
+        click: () => macUpdater.installNow()
+      }
+    );
+  } else if (macUpdateState?.status === 'downloading') {
+    items.push(
+      { type: 'separator' },
+      { label: `Downloading Update ${macUpdateState.version}`, enabled: false }
+    );
+  }
+
+  items.push(
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
-  ]));
+  );
+
+  tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
 function createTray() {
@@ -220,5 +262,8 @@ ipcMain.on('notify', (_, { title, body }) => {
   if (Notification.isSupported()) new Notification({ title, body, silent: false }).show();
 });
 
+app.on('before-quit', () => {
+  macUpdater?.installOnQuit();
+});
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', (e) => e.preventDefault());
