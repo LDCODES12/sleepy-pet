@@ -1,6 +1,6 @@
 {
   "name": "sleepy-pet",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "A kawaii desktop pet that helps you get to bed on time",
   "author": "Liam",
   "main": "main.js",
@@ -15,6 +15,7 @@
     "productName": "Sleepy Pet",
     "mac": {
       "category": "public.app-category.lifestyle",
+      "identity": null,
       "target": [
         "dmg",
         "zip"
