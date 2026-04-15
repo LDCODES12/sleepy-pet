@@ -13,6 +13,20 @@ let macUpdater;
 const WIN_W = 340;
 const WIN_H = 440;
 
+// Keep these in sync with the visible cat canvas in index.html.
+const CAT_STAGE_W = 96;
+const CAT_STAGE_H = 80;
+const CAT_CANVAS_LEFT = WIN_W + 12 - CAT_STAGE_W; // CSS right:-12px
+const CAT_CANVAS_TOP = WIN_H - 4 - CAT_STAGE_H; // CSS bottom:4px
+const CAT_CENTER_X = CAT_CANVAS_LEFT + 48;
+const CAT_FACE_LEFT_X = CAT_CANVAS_LEFT + 21;
+const CAT_FACE_RIGHT_X = CAT_CANVAS_LEFT + 70;
+const CAT_FACE_Y = CAT_CANVAS_TOP + 37;
+const FOLLOW_TICK_MS = 16;
+const FOLLOW_LERP = 0.2;
+const FOLLOW_MAX_STEP = 96;
+const FOLLOW_SCREEN_OVERSCAN = 96;
+
 app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
   createWindow();
@@ -176,8 +190,13 @@ function resetPosition() {
   mainWindow?.setPosition(width - WIN_W - 10, height - WIN_H - 10);
 }
 
-function createRoomWindow() {
-  if (roomWindow) { roomWindow.focus(); return; }
+function createRoomWindow(initialMode = 'edit') {
+  const mode = initialMode === 'play' ? 'play' : 'edit';
+  if (roomWindow) {
+    roomWindow.focus();
+    roomWindow.webContents.send('set-room-mode', mode);
+    return;
+  }
 
   roomWindow = new BrowserWindow({
     width: 900,
@@ -192,7 +211,7 @@ function createRoomWindow() {
     }
   });
 
-  roomWindow.loadFile('room.html');
+  roomWindow.loadFile('room.html', { query: { mode } });
   roomWindow.on('closed', () => { roomWindow = null; });
 }
 
@@ -200,28 +219,73 @@ function createRoomWindow() {
 let followMouse = false;
 let followInterval = null;
 
+function clamp(n, min, max) {
+  return Math.min(max, Math.max(min, n));
+}
+
+function getVirtualDisplayBounds() {
+  const displays = screen.getAllDisplays();
+  const allBounds = displays.length ? displays.map((display) => display.bounds) : [screen.getPrimaryDisplay().bounds];
+  const minX = Math.min(...allBounds.map((bounds) => bounds.x));
+  const minY = Math.min(...allBounds.map((bounds) => bounds.y));
+  const maxX = Math.max(...allBounds.map((bounds) => bounds.x + bounds.width));
+  const maxY = Math.max(...allBounds.map((bounds) => bounds.y + bounds.height));
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function clampFollowTarget(x, y) {
+  const bounds = getVirtualDisplayBounds();
+  const minFaceX = Math.min(CAT_FACE_LEFT_X, CAT_FACE_RIGHT_X);
+  const maxFaceX = Math.max(CAT_FACE_LEFT_X, CAT_FACE_RIGHT_X);
+  return {
+    x: clamp(
+      x,
+      bounds.x - maxFaceX - FOLLOW_SCREEN_OVERSCAN,
+      bounds.x + bounds.width - minFaceX + FOLLOW_SCREEN_OVERSCAN
+    ),
+    y: clamp(
+      y,
+      bounds.y - CAT_FACE_Y - FOLLOW_SCREEN_OVERSCAN,
+      bounds.y + bounds.height - CAT_FACE_Y + FOLLOW_SCREEN_OVERSCAN
+    )
+  };
+}
+
+function nextFollowCoord(current, target) {
+  const delta = target - current;
+  if (!Number.isFinite(delta)) return current;
+  if (Math.abs(delta) < 1) return Math.round(target);
+  const step = clamp(delta * FOLLOW_LERP, -FOLLOW_MAX_STEP, FOLLOW_MAX_STEP);
+  return Math.round(current + step);
+}
+
+function isSafeWindowCoord(n) {
+  return Number.isFinite(n) && Math.abs(n) < 100000;
+}
+
 function startFollowMouse() {
   if (followInterval) return;
   followInterval = setInterval(() => {
-    if (!mainWindow || !followMouse) return;
-    const cursor = screen.getCursorScreenPoint();
-    const [wx, wy] = mainWindow.getPosition();
-    // Cat sprite: bottom:4 right:4, 64x64 in a 340x440 window
-    // Face is on the LEFT side by default; flipped = face on RIGHT
-    const catCenterX = wx + WIN_W - 36; // center of 64px sprite
-    const facingLeft = cursor.x < catCenterX;
-    // Offset so cursor lands a little in front of the face
-    const targetX = facingLeft
-      ? cursor.x - WIN_W + 72   // face is on left → push window right so face meets cursor
-      : cursor.x - WIN_W + 4;   // face is on right → pull window left so face meets cursor
-    const targetY = cursor.y - WIN_H + 48;
-    const newX = Math.round(wx + (targetX - wx) * 0.08);
-    const newY = Math.round(wy + (targetY - wy) * 0.08);
-    if (newX !== wx || newY !== wy) {
-      mainWindow.setPosition(newX, newY);
+    if (!mainWindow || mainWindow.isDestroyed() || !followMouse) return;
+    try {
+      const cursor = screen.getCursorScreenPoint();
+      const [wx, wy] = mainWindow.getPosition();
+      const facingLeft = cursor.x < wx + CAT_CENTER_X;
+      const faceX = facingLeft ? CAT_FACE_LEFT_X : CAT_FACE_RIGHT_X;
+      const target = clampFollowTarget(cursor.x - faceX, cursor.y - CAT_FACE_Y);
+      const newX = nextFollowCoord(wx, target.x);
+      const newY = nextFollowCoord(wy, target.y);
+      if (!isSafeWindowCoord(newX) || !isSafeWindowCoord(newY)) return;
+      if (newX !== wx || newY !== wy) {
+        mainWindow.setPosition(newX, newY);
+      }
+      if (!mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send('cursor-dir', facingLeft ? 'left' : 'right');
+      }
+    } catch (err) {
+      console.error('Follow mouse update failed:', err);
     }
-    mainWindow.webContents.send('cursor-dir', facingLeft ? 'left' : 'right');
-  }, 16);
+  }, FOLLOW_TICK_MS);
 }
 
 function stopFollowMouse() {
@@ -255,7 +319,7 @@ ipcMain.on('toggle-follow', (_, enabled) => {
   setFollowMouseEnabled(enabled, { resetPositionOnStop: !enabled });
 });
 
-ipcMain.on('open-room', () => createRoomWindow());
+ipcMain.on('open-room', (_, mode) => createRoomWindow(mode));
 ipcMain.on('quit-app', () => app.quit());
 ipcMain.on('hide-mochi', () => hideMochi());
 ipcMain.on('notify', (_, { title, body }) => {

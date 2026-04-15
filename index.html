@@ -11,30 +11,35 @@
     /* ── Cat canvas ── */
     #cat-canvas {
       position: absolute;
-      bottom: 4px; right: 4px;
-      width: 64px; height: 64px;
+      bottom: 4px; right: -12px;
+      width: 96px; height: 80px;
       image-rendering: pixelated;
       cursor: pointer;
       background: transparent;
     }
 
     /* ── Mini room view ── */
-    #room-view {
+    #room-view-wrap {
       position: absolute;
       bottom: 4px; right: 4px;
-      width: 220px; height: 220px;
-      image-rendering: pixelated;
-      cursor: grab;
-      background: transparent;
+      width: 256px; height: 256px;
       display: none;
       border-radius: 8px;
     }
+    #room-view-wrap.show { display: block; }
+    #room-view {
+      width: 256px; height: 256px;
+      image-rendering: pixelated;
+      cursor: grab;
+      background: transparent;
+      border-radius: 8px;
+      display: block;
+    }
     #room-view:active { cursor: grabbing; }
-    #room-view.show { display: block; }
 
     /* ── Speech bubble ── */
     .bubble {
-      position: absolute; bottom: 72px; right: 4px;
+      position: absolute; top: 0; left: 0;
       background: rgba(35, 28, 50, 0.92);
       backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
       border: 1px solid rgba(255,255,255,0.12);
@@ -42,10 +47,12 @@
       font-size: 11px; color: #ede6f8; white-space: nowrap;
       opacity: 0; transition: opacity 0.3s;
       pointer-events: none;
+      --bubble-tail-left: 50%;
     }
     .bubble.show { opacity: 1; }
     .bubble::after {
-      content: ''; position: absolute; bottom: -5px; right: 20px;
+      content: ''; position: absolute; bottom: -5px; left: var(--bubble-tail-left);
+      transform: translateX(-50%);
       border-left: 5px solid transparent; border-right: 5px solid transparent;
       border-top: 5px solid rgba(35, 28, 50, 0.92);
     }
@@ -53,85 +60,198 @@
     /* ── Menu ── */
     .menu {
       position: absolute; bottom: 72px; right: 4px;
-      display: none; flex-direction: column; gap: 3px;
+      display: none; flex-direction: column; gap: 4px;
+      padding: 1px 0 4px;
+      filter: drop-shadow(2px 3px 0 rgba(23, 18, 31, 0.55));
     }
     .menu.open { display: flex; }
     .menu-btn {
-      background: rgba(35, 28, 50, 0.94);
-      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 10px; padding: 7px 14px;
-      color: #ede6f8; font-size: 11px; font-weight: 600;
-      cursor: pointer; white-space: nowrap; text-align: left;
-      transition: background 0.15s;
+      position: relative;
+      min-width: 116px; height: 27px;
+      display: flex; align-items: center;
+      padding: 0 12px 2px 13px;
+      background: #f7e5bd;
+      border: 0;
+      border-radius: 0;
+      color: #4b3528;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.2px;
+      line-height: 1;
+      cursor: pointer; text-align: left;
+      image-rendering: pixelated;
+      text-transform: none;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #5c4634,
+        inset 0 0 0 3px #8f6d4d,
+        inset 0 0 0 5px #fff2cf,
+        2px 2px 0 #2d2524;
+      transition:
+        transform 90ms cubic-bezier(0.2, 0.8, 0.2, 1),
+        filter 90ms ease,
+        background-color 90ms ease,
+        box-shadow 90ms ease;
     }
-    .menu-btn:hover { background: rgba(108, 92, 231, 0.55); }
+    .menu-btn::before {
+      content: '';
+      position: absolute;
+      left: 6px; right: 6px; top: 5px; bottom: 5px;
+      border-top: 1px solid #fdf4d7;
+      border-bottom: 1px solid #5c4634;
+      pointer-events: none;
+      opacity: 0.55;
+      transition: opacity 90ms ease;
+    }
+    .menu-btn:hover {
+      background: #fff2cf;
+      filter: brightness(1.03);
+      transform: translateY(-1px);
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #5c4634,
+        inset 0 0 0 3px #8f6d4d,
+        inset 0 0 0 5px #fff7df,
+        2px 3px 0 #2d2524;
+    }
+    .menu-btn:hover::before {
+      opacity: 0.72;
+    }
+    .menu-btn:active {
+      background: #d6c08b;
+      filter: brightness(0.98);
+      transform: translate(1px, 1px);
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #5c4634,
+        inset 0 0 0 3px #5c4634,
+        inset 0 0 0 5px #d2b27e,
+        1px 1px 0 #2d2524;
+    }
+    .menu-btn:focus-visible {
+      outline: 2px solid #fff7df;
+      outline-offset: 3px;
+    }
 
     /* ── Panel shared ── */
     .panel {
       position: absolute; bottom: 72px; right: 4px;
-      background: rgba(28, 22, 48, 0.94);
-      backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 14px; padding: 14px;
-      color: #ede6f8; font-size: 12px;
+      background: #f7e5bd;
+      border: 0;
+      border-radius: 0;
+      padding: 11px;
+      color: #4b3528; font-size: 12px;
       display: none;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #5c4634,
+        inset 0 0 0 3px #8f6d4d,
+        inset 0 0 0 6px #fff2cf,
+        3px 4px 0 rgba(23, 18, 31, 0.55);
     }
     .panel.open { display: block; }
-    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    .panel-header h3 { font-size: 13px; font-weight: 600; }
-    .panel-close {
-      background: none; border: none; color: rgba(255,255,255,0.4);
-      font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1;
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #8f6d4d; }
+    .panel-header h3 {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 13px; font-weight: 900; letter-spacing: 0.3px; color: #4b3528;
     }
-    .panel-close:hover { color: rgba(255,255,255,0.8); }
+    .panel-close {
+      width: 18px; height: 18px;
+      background: #d6c08b; border: 0; color: #4b3528;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 15px; font-weight: 900; cursor: pointer; padding: 0; line-height: 16px;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 0 0 3px #fff2cf,
+        1px 1px 0 #2d2524;
+    }
+    .panel-close:hover { background: #fff2cf; transform: translateY(-1px); }
+    .panel-close:active { background: #caa77a; transform: translate(1px, 1px); box-shadow: 0 0 0 1px #2d2524, inset 0 0 0 3px #d6c08b; }
 
     /* ── Settings (retro pixel style) ── */
-    #settings-panel { width: 180px; }
+    #settings-panel { width: 168px; }
     .lbl {
-      display: block; font-size: 8px; text-transform: uppercase;
-      letter-spacing: 1.2px; color: rgba(200,180,255,0.5);
-      margin-bottom: 3px; margin-top: 8px;
-      font-family: monospace;
+      display: block; font-size: 7px; text-transform: uppercase;
+      letter-spacing: 1.2px; color: #8f6d4d;
+      margin-bottom: 4px; margin-top: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-weight: 900;
     }
     .lbl:first-of-type { margin-top: 0; }
     .time-row {
-      display: flex; align-items: center; gap: 4px;
+      display: grid; grid-template-columns: 21px 1fr 21px; align-items: center; gap: 6px;
     }
     .time-btn {
-      width: 20px; height: 20px; border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 4px; background: rgba(255,255,255,0.06);
-      color: #c8b4ff; font-size: 12px; font-weight: bold;
+      width: 21px; height: 21px; border: 0;
+      border-radius: 0; background: #d6c08b;
+      color: #4b3528; font-size: 13px; font-weight: 900;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
-      font-family: monospace; line-height: 1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace; line-height: 1;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 0 0 3px #fff2cf,
+        1px 1px 0 #2d2524;
+      transition: transform 90ms ease, background-color 90ms ease, box-shadow 90ms ease;
     }
-    .time-btn:hover { background: rgba(108,92,231,0.3); }
-    .time-btn:active { background: rgba(108,92,231,0.5); }
+    .time-btn:hover { background: #fff2cf; transform: translateY(-1px); }
+    .time-btn:active { background: #caa77a; transform: translate(1px, 1px); box-shadow: 0 0 0 1px #2d2524, inset 0 0 0 3px #d6c08b; }
     .time-display {
-      flex: 1; text-align: center;
-      font-family: monospace; font-size: 13px; font-weight: bold;
-      color: #e0d4ff; letter-spacing: 1px;
+      min-width: 0;
+      height: 21px;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 11px; font-weight: 900;
+      color: #4b3528; letter-spacing: 0.5px;
+      background: #fff7df;
+      box-shadow:
+        0 0 0 1px #8f6d4d,
+        inset 0 -2px 0 #d6c08b;
     }
-    .sleep-info { margin-top: 10px; text-align: center; }
+    .sleep-info { margin-top: 9px; text-align: center; }
     .sleep-dur {
-      font-family: monospace; font-weight: bold; font-size: 11px;
-      color: #c8b4ff; letter-spacing: 0.5px;
+      display: inline-block;
+      min-width: 58px;
+      padding: 3px 7px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-weight: 900; font-size: 11px;
+      color: #4b3528; letter-spacing: 0.5px;
+      background: #fff7df;
+      box-shadow: 0 0 0 1px #8f6d4d, inset 0 -2px 0 #d6c08b;
     }
-    .sleep-bar { height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; margin-top: 4px; }
-    .sleep-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s, background 0.5s; }
-    .sleep-qual { font-family: monospace; font-size: 8px; font-weight: 500; margin-top: 3px; text-align: center; letter-spacing: 0.5px; }
+    .sleep-bar {
+      height: 7px; background: #d6c08b; border-radius: 0; overflow: hidden; margin-top: 7px;
+      box-shadow: 0 0 0 1px #5c4634, inset 0 0 0 2px #8f6d4d;
+    }
+    .sleep-bar-fill { height: 100%; border-radius: 0; transition: width 0.5s, background 0.5s; box-shadow: inset 0 -2px 0 rgba(45,37,36,0.18); }
+    .sleep-qual {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 8px; font-weight: 900; margin-top: 5px; text-align: center; letter-spacing: 0.9px;
+      color: #2f8d66; text-transform: uppercase;
+    }
     .streak-row {
-      margin-top: 10px; padding-top: 8px;
-      border-top: 1px solid rgba(255,255,255,0.06);
+      margin-top: 9px; padding-top: 8px;
+      border-top: 2px solid #d6c08b;
       text-align: center;
     }
     .streak-count {
-      font-family: monospace; font-size: 18px; font-weight: bold;
-      color: #FFD96B; letter-spacing: 1px;
+      width: 27px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 17px; font-weight: 900;
+      color: #5c4634; letter-spacing: 0;
+      background: #ffd96b;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 0 0 3px #fff2a1,
+        2px 2px 0 #8f6d4d;
     }
     .streak-label {
-      font-family: monospace; font-size: 7px; text-transform: uppercase;
-      letter-spacing: 1.2px; color: rgba(200,180,255,0.4); margin-top: 2px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 7px; text-transform: uppercase;
+      letter-spacing: 1.2px; color: #8f6d4d; margin-top: 5px; font-weight: 900;
     }
 
     /* ── Inventory ── */
@@ -165,8 +285,10 @@
 </head>
 <body>
   <!-- Cat -->
-  <canvas id="cat-canvas" width="32" height="32"></canvas>
-  <canvas id="room-view" width="220" height="220"></canvas>
+  <canvas id="cat-canvas" width="96" height="80"></canvas>
+  <div id="room-view-wrap">
+    <canvas id="room-view" width="256" height="256"></canvas>
+  </div>
   <div class="bubble" id="bubble"></div>
 
   <!-- Menu -->
@@ -183,7 +305,7 @@
 
   <!-- Settings -->
   <div class="panel" id="settings-panel">
-    <div class="panel-header"><h3 style="font-family:monospace;font-size:11px;letter-spacing:1px">Sleep</h3><button class="panel-close" data-panel="settings-panel">&times;</button></div>
+    <div class="panel-header"><h3>Sleep</h3><button class="panel-close" data-panel="settings-panel">&times;</button></div>
     <span class="lbl">Bedtime</span>
     <div class="time-row">
       <button class="time-btn" data-target="bedtime" data-dir="-1">-</button>
@@ -221,7 +343,7 @@
     // ═══════ MOUSE CLICK-THROUGH ═══════
     // Window ignores mouse by default. When mouse enters visible content,
     // we tell main process to stop ignoring so we can interact.
-    const interactiveEls = ['cat-canvas', 'room-view', 'menu', 'settings-panel', 'inv-panel'];
+    const interactiveEls = ['cat-canvas', 'room-view-wrap', 'menu', 'settings-panel', 'inv-panel'];
 
     function setupClickThrough() {
       for (const id of interactiveEls) {
@@ -240,6 +362,13 @@
     const canvas = document.getElementById('cat-canvas');
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
+    const CAT_RENDER_SCALE = 2;
+    const CAT_STAGE_W = 96;
+    const CAT_STAGE_H = 80;
+    const CAT_STAGE_ANCHOR = { x: 48, y: 78 };
+    const CAT_WORLD_ANCHOR = { x: 15.5, y: 31 };
+    const CAT_HEAD_ANCHOR_MAX_Y = 18;
+    const SPRITE_ALPHA_THRESHOLD = 20;
 
     const BASE = 'assets/cat-pack-paid/CatPackPaid/Sprites/Classical/Individual/';
     const ANIMS = {
@@ -264,6 +393,72 @@
     const imgs = {};
     let loaded = 0;
     const total = Object.keys(ANIMS).length;
+    const spriteAnchorCache = new Map();
+    const anchorScanCanvas = document.createElement('canvas');
+    anchorScanCanvas.width = S;
+    anchorScanCanvas.height = S;
+    const anchorScanCtx = anchorScanCanvas.getContext('2d', { willReadFrequently: true });
+    anchorScanCtx.imageSmoothingEnabled = false;
+
+    function scanFrameAnchor(img, sx, sy) {
+      anchorScanCtx.clearRect(0, 0, S, S);
+      anchorScanCtx.drawImage(img, sx, sy, S, S, 0, 0, S, S);
+      const pixels = anchorScanCtx.getImageData(0, 0, S, S).data;
+      let minX = S, minY = S, maxX = -1, maxY = -1;
+      let headMinX = S, headMaxX = -1;
+
+      for (let y = 0; y < S; y++) {
+        for (let x = 0; x < S; x++) {
+          const alpha = pixels[(y * S + x) * 4 + 3];
+          if (alpha <= SPRITE_ALPHA_THRESHOLD) continue;
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+          if (y <= CAT_HEAD_ANCHOR_MAX_Y) {
+            headMinX = Math.min(headMinX, x);
+            headMaxX = Math.max(headMaxX, x);
+          }
+        }
+      }
+
+      if (maxX < 0) return null;
+      return {
+        x: headMaxX >= 0 ? (headMinX + headMaxX) / 2 : (minX + maxX) / 2,
+        y: maxY,
+      };
+    }
+
+    function getAnimationAnchor(img, animName, row = 0, cacheKey = '') {
+      const anim = ANIMS[animName];
+      if (!anim || !img) return CAT_WORLD_ANCHOR;
+
+      const key = cacheKey + ':' + animName + ':' + row + ':transition';
+      if (spriteAnchorCache.has(key)) return spriteAnchorCache.get(key);
+
+      const anchor = scanFrameAnchor(img, 0, row * S) || CAT_WORLD_ANCHOR;
+      spriteAnchorCache.set(key, anchor);
+      return anchor;
+    }
+
+    function drawAnchoredFrame(drawCtx, img, sx, sy, anchor, scale, targetX, targetY, flip = false) {
+      const mirroredAnchorX = flip ? S - 1 - anchor.x : anchor.x;
+      const dx = Math.round(targetX - mirroredAnchorX * scale);
+      const dy = Math.round(targetY - anchor.y * scale);
+      const dw = S * scale;
+      const dh = S * scale;
+
+      drawCtx.save();
+      drawCtx.imageSmoothingEnabled = false;
+      if (flip) {
+        drawCtx.translate(dx + dw, dy);
+        drawCtx.scale(-1, 1);
+        drawCtx.drawImage(img, sx, sy, S, S, 0, 0, dw, dh);
+      } else {
+        drawCtx.drawImage(img, sx, sy, S, S, dx, dy, dw, dh);
+      }
+      drawCtx.restore();
+    }
 
     for (const [name, a] of Object.entries(ANIMS)) {
       const img = new Image();
@@ -347,10 +542,12 @@
 
     function tick(t) {
       if (mochiHidden) {
-        ctx.clearRect(0, 0, S, S);
+        ctx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
         requestAnimationFrame(tick);
         return;
       }
+
+      if (followingMouse) keepFollowExcited();
 
       // Auto-return from click animation
       if (clickAnimEnd && t >= clickAnimEnd) {
@@ -374,23 +571,20 @@
 
       // Always redraw current frame (prevents stale canvas / shift)
       const f = Math.min(frame, a.frames - 1);
-      ctx.clearRect(0, 0, S, S);
-      ctx.save();
-      if (catFlip) {
-        ctx.translate(S, 0);
-        ctx.scale(-1, 1);
-      }
+      ctx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
       const atlasImgSrc = ribbonAtlasImg || skinAtlasImg;
       const row = ATLAS_ANIM_ROWS[curAnim];
       if (atlasImgSrc && row !== undefined) {
-        ctx.drawImage(atlasImgSrc, f * S, row * S, S, S, 0, 0, S, S);
+        const anchor = getAnimationAnchor(atlasImgSrc, curAnim, row, 'atlas:' + (selectedRibbon || selectedSkin || 'classic'));
+        drawAnchoredFrame(ctx, atlasImgSrc, f * S, row * S, anchor, CAT_RENDER_SCALE, CAT_STAGE_ANCHOR.x, CAT_STAGE_ANCHOR.y, catFlip);
       } else {
-        ctx.drawImage(img, f * S, 0, S, S, 0, 0, S, S);
+        const anchor = getAnimationAnchor(img, curAnim, 0, 'individual:' + curAnim);
+        drawAnchoredFrame(ctx, img, f * S, 0, anchor, CAT_RENDER_SCALE, CAT_STAGE_ANCHOR.x, CAT_STAGE_ANCHOR.y, catFlip);
       }
-      ctx.restore();
 
       // Update mini room view if active
-      if (showingRoom) renderRoomView();
+      if (showingRoom) renderRoomView(t);
+      positionBubble();
 
       requestAnimationFrame(tick);
     }
@@ -646,6 +840,7 @@
       const b = document.getElementById('bubble');
       b.textContent = text;
       b.classList.add('show');
+      positionBubble();
       clearTimeout(bubbleTimer);
       bubbleTimer = setTimeout(() => b.classList.remove('show'), 6000);
     }
@@ -673,7 +868,7 @@
           if (!showingRoom) {
             showingRoom = true;
             localStorage.setItem('showRoom', 'true');
-            roomViewCanvas.classList.add('show');
+            roomViewWrap.classList.add('show');
             canvas.style.display = 'none';
             document.getElementById('viewroom-btn').textContent = 'Hide Room';
             loadRoomView();
@@ -779,64 +974,1379 @@
       followingMouse = enabled;
       localStorage.setItem('followMouse', String(enabled));
       document.getElementById('follow-btn').textContent = enabled ? 'Stop Following' : 'Follow Mouse';
-      if (!changed) return;
       if (enabled) {
-        clearTimeout(idleTimer);
-        if (state !== 'sleeping') play('excited');
-      } else {
+        keepFollowExcited();
+        return;
+      }
+      if (!changed) return;
+      if (!enabled) {
+        clickAnimEnd = 0;
         catFlip = false;
         play(defaultIdle());
         scheduleCycleAnim();
       }
     }
 
+    function keepFollowExcited() {
+      if (!followingMouse) return;
+      clearTimeout(idleTimer);
+      clickAnimEnd = 0;
+      if (curAnim !== 'excited') {
+        play('excited');
+      }
+    }
+
     // ═══════ MINI ROOM VIEW ═══════
+    const roomViewWrap = document.getElementById('room-view-wrap');
     const roomViewCanvas = document.getElementById('room-view');
     const rvCtx = roomViewCanvas.getContext('2d');
     rvCtx.imageSmoothingEnabled = false;
 
     let roomBgImg = null;
     let roomViewItems = [];
+    let roomViewEntries = [];
+    let rvBlockingFootprints = [];
+    let rvFloorItemEntries = [];
+    let rvOccluderEntries = [];
+    const RV_SIZE = 256;
+    const RV_WORLD = 512;
+    const RV_SCALE = RV_SIZE / RV_WORLD;
+    const RV_MOCHI_DRAW_SIZE = 64;
+    const RV_MOCHI_SPEED = 2.2;
+    const RV_MOCHI_HOP_SPEED = 5.2;
+    const RV_MOCHI_MAX_HOP_DISTANCE = 280;
+    const RV_MOCHI_PATH_GRID = 16;
+    const RV_MOCHI_PATH_MAX_NODES = 2600;
+    const RV_MOCHI_TARGET_CLEARANCE = 10;
+    const RV_MOCHI_FOOT_CENTER = { x: 30, y: 55 };
+    const RV_MOCHI_BASE_ROWS = [
+      { y: 49, minX: 22, maxX: 38 },
+      { y: 50, minX: 18, maxX: 42 },
+      { y: 51, minX: 16, maxX: 44 },
+      { y: 52, minX: 15, maxX: 45 },
+      { y: 53, minX: 14, maxX: 46 },
+      { y: 54, minX: 14, maxX: 46 },
+      { y: 55, minX: 14, maxX: 46 },
+      { y: 56, minX: 15, maxX: 45 },
+      { y: 57, minX: 16, maxX: 44 },
+      { y: 58, minX: 18, maxX: 42 },
+      { y: 59, minX: 21, maxX: 39 },
+    ];
+    const RV_ROOM_ZONES = {
+      floor: [
+        { x: 21, y: 323 },
+        { x: 256, y: 197 },
+        { x: 493, y: 323 },
+        { x: 258, y: 456 },
+      ],
+      roomShell: [
+        { x: 20, y: 164 },
+        { x: 256, y: 28 },
+        { x: 505, y: 164 },
+        { x: 493, y: 323 },
+        { x: 258, y: 456 },
+        { x: 21, y: 323 },
+      ],
+    };
+    const RV_BIG_BED_ROWS = [
+      { y: 25, minX: 55, maxX: 57 }, { y: 26, minX: 51, maxX: 59 },
+      { y: 27, minX: 49, maxX: 61 }, { y: 28, minX: 47, maxX: 64 },
+      { y: 29, minX: 46, maxX: 65 }, { y: 30, minX: 44, maxX: 66 },
+      { y: 31, minX: 42, maxX: 68 }, { y: 32, minX: 41, maxX: 70 },
+      { y: 33, minX: 39, maxX: 72 }, { y: 34, minX: 37, maxX: 73 },
+      { y: 35, minX: 35, maxX: 75 }, { y: 36, minX: 33, maxX: 77 },
+      { y: 37, minX: 32, maxX: 78 }, { y: 38, minX: 31, maxX: 80 },
+      { y: 39, minX: 29, maxX: 82 }, { y: 40, minX: 28, maxX: 83 },
+      { y: 41, minX: 28, maxX: 84 }, { y: 42, minX: 26, maxX: 85 },
+      { y: 43, minX: 26, maxX: 86 }, { y: 44, minX: 27, maxX: 86 },
+      { y: 45, minX: 29, maxX: 85 }, { y: 46, minX: 32, maxX: 85 },
+      { y: 47, minX: 32, maxX: 85 }, { y: 48, minX: 33, maxX: 83 },
+      { y: 49, minX: 34, maxX: 83 }, { y: 50, minX: 35, maxX: 83 },
+      { y: 51, minX: 38, maxX: 83 }, { y: 52, minX: 0, maxX: 40 },
+      { y: 52, minX: 41, maxX: 82 }, { y: 52, minX: 83, maxX: 109 },
+      { y: 53, minX: 0, maxX: 40 }, { y: 53, minX: 41, maxX: 82 },
+      { y: 53, minX: 83, maxX: 109 }, { y: 54, minX: 0, maxX: 41 },
+      { y: 54, minX: 42, maxX: 82 }, { y: 54, minX: 83, maxX: 108 },
+      { y: 55, minX: 1, maxX: 44 }, { y: 55, minX: 45, maxX: 81 },
+      { y: 55, minX: 82, maxX: 107 }, { y: 56, minX: 2, maxX: 46 },
+      { y: 56, minX: 47, maxX: 80 }, { y: 56, minX: 81, maxX: 106 },
+      { y: 57, minX: 4, maxX: 48 }, { y: 57, minX: 49, maxX: 79 },
+      { y: 57, minX: 80, maxX: 105 }, { y: 58, minX: 5, maxX: 48 },
+      { y: 58, minX: 49, maxX: 79 }, { y: 58, minX: 80, maxX: 104 },
+      { y: 59, minX: 6, maxX: 57 }, { y: 59, minX: 58, maxX: 75 },
+      { y: 59, minX: 76, maxX: 102 }, { y: 60, minX: 8, maxX: 101 },
+      { y: 61, minX: 9, maxX: 100 }, { y: 62, minX: 11, maxX: 99 },
+      { y: 63, minX: 12, maxX: 98 }, { y: 64, minX: 13, maxX: 97 },
+      { y: 65, minX: 14, maxX: 95 }, { y: 66, minX: 16, maxX: 94 },
+      { y: 67, minX: 18, maxX: 92 }, { y: 68, minX: 20, maxX: 91 },
+      { y: 69, minX: 21, maxX: 90 }, { y: 70, minX: 23, maxX: 89 },
+      { y: 71, minX: 25, maxX: 87 }, { y: 72, minX: 26, maxX: 85 },
+      { y: 73, minX: 28, maxX: 83 }, { y: 74, minX: 30, maxX: 81 },
+      { y: 75, minX: 32, maxX: 79 }, { y: 76, minX: 33, maxX: 78 },
+      { y: 77, minX: 34, maxX: 77 }, { y: 78, minX: 35, maxX: 75 },
+      { y: 79, minX: 37, maxX: 74 }, { y: 80, minX: 38, maxX: 72 },
+      { y: 81, minX: 40, maxX: 70 },
+    ];
+    const RV_TOY_POM_POINTS = [
+      { x: 5.5, y: 14.5 }, { x: 6.5, y: 15.5 }, { x: 7.5, y: 15.5 },
+      { x: 5.5, y: 17.5 }, { x: 5.5, y: 16.5 }, { x: 5.5, y: 16.5 },
+    ];
+    const RV_ROOM_CONTROL_ART = {
+      framePlane: { x: 132, y: -5, ux: 116, uy: 62, vx: 0, vy: 19 },
+      facePlane: { x: 140, y: 0, ux: 101, uy: 54, vx: 0, vy: 15 },
+      postUs: [0.34, 0.82],
+      playButton: { u0: 0.06, u1: 0.56, v0: 0.05, v1: 0.98 },
+      editButton: { u0: 0.60, u1: 0.96, v0: 0.05, v1: 0.98 },
+      labelCell: { u: 0.019, v: 0.135 },
+      lipDepth: { x: 0, y: 2 },
+    };
+    const RV_PIXEL_FONT = {
+      ' ': ['00', '00', '00', '00', '00'],
+      A: ['111', '101', '111', '101', '101'],
+      B: ['110', '101', '110', '101', '110'],
+      C: ['111', '100', '100', '100', '111'],
+      D: ['110', '101', '101', '101', '110'],
+      E: ['111', '100', '110', '100', '111'],
+      F: ['111', '100', '110', '100', '100'],
+      G: ['111', '100', '101', '101', '111'],
+      H: ['101', '101', '111', '101', '101'],
+      I: ['111', '010', '010', '010', '111'],
+      K: ['101', '101', '110', '101', '101'],
+      L: ['100', '100', '100', '100', '111'],
+      M: ['1001', '1111', '1111', '1001', '1001'],
+      N: ['1001', '1101', '1011', '1001', '1001'],
+      O: ['111', '101', '101', '101', '111'],
+      P: ['110', '101', '110', '100', '100'],
+      Q: ['1110', '1001', '1001', '1011', '1111'],
+      R: ['110', '101', '110', '101', '101'],
+      S: ['111', '100', '111', '001', '111'],
+      T: ['111', '010', '010', '010', '010'],
+      U: ['101', '101', '101', '101', '111'],
+      V: ['101', '101', '101', '101', '010'],
+      W: ['1001', '1001', '1111', '1111', '1001'],
+      Y: ['101', '101', '010', '010', '010'],
+    };
+    const rvShapeCache = new Map();
+    const rvPixelTextCanvasCache = new Map();
+    let roomViewPlaying = false;
+    let rvLoadedRoomNum = null;
+    let rvMochiX = 240, rvMochiY = 350, rvMochiTargetX = null, rvMochiTargetY = null;
+    let rvMochiDestX = null, rvMochiDestY = null, rvMochiPath = [], rvMochiMoveMode = 'walk';
+    let rvMochiHopStartX = null, rvMochiHopStartY = null, rvMochiHopDistance = 1;
+    let rvMochiAnim = 'waiting', rvMochiFrame = 0, rvMochiLastT = 0, rvMochiAnimCb = null;
+    let rvMochiFlip = false, rvMochiMoveCb = null, rvNextWanderAt = 0;
+    let rvToyX = 0, rvToyY = 0, rvToyInside = false, rvLastToyFollowAt = 0, rvLastToyTarget = null;
+    let rvDragging = false, rvStartX, rvStartY, rvOrigLeft, rvOrigTop, rvMoved = false;
+    let rvPointerOverControl = false, rvControlPressed = null;
+    let rvPointerCanvasPoint = null;
 
     function loadRoomView() {
       const roomNum = parseInt(localStorage.getItem('currentRoom') || '1');
+      const roomChanged = rvLoadedRoomNum !== roomNum;
+      rvLoadedRoomNum = roomNum;
       const img = new Image();
       img.onload = () => { roomBgImg = img; };
       img.src = 'assets/cat-room-paid/CatRoomPaid/Rooms/Room' + roomNum + '.png';
 
       const saved = localStorage.getItem('roomLayout_' + roomNum);
       roomViewItems = saved ? JSON.parse(saved) : [];
+      for (const item of roomViewItems) {
+        const def = findCatalogItem(item.id);
+        if (def) ensureDecoImg(def.src);
+      }
+      rvRebuildRoomViewCache();
+      if (roomChanged || !roomViewPlaying) rvLoadMochiPos();
+      else rvEnsureMochiSafe();
     }
 
-    function renderRoomView() {
-      if (!showingRoom) return;
-      const RV = 220;
-      rvCtx.clearRect(0, 0, RV, RV);
-      // Scale 512 → 220
-      if (roomBgImg) rvCtx.drawImage(roomBgImg, 0, 0, 512, 512, 0, 0, RV, RV);
+    function rvCurrentRoomNum() {
+      return parseInt(localStorage.getItem('currentRoom') || '1');
+    }
 
-      // Draw placed items (scaled)
-      const scale = RV / 512;
+    function rvMochiStorageKey() {
+      return 'mochiPos_' + rvCurrentRoomNum();
+    }
+
+    function rvLoadMochiPos() {
+      const saved = localStorage.getItem(rvMochiStorageKey());
+      if (saved) {
+        try {
+          const pos = JSON.parse(saved);
+          rvMochiX = typeof pos.x === 'number' ? pos.x : 240;
+          rvMochiY = typeof pos.y === 'number' ? pos.y : 350;
+        } catch {
+          rvMochiX = 240;
+          rvMochiY = 350;
+        }
+      } else {
+        rvMochiX = 240;
+        rvMochiY = 350;
+      }
+      rvStopMochiMovement(false);
+      rvEnsureMochiSafe();
+      if (!roomViewPlaying) rvMochiPlay('waiting');
+    }
+
+    function rvSaveMochiPos() {
+      localStorage.setItem(rvMochiStorageKey(), JSON.stringify({ x: Math.round(rvMochiX), y: Math.round(rvMochiY) }));
+    }
+
+    function rvSetRoomCursor() {
+      if (rvDragging) roomViewCanvas.style.cursor = 'grabbing';
+      else if (rvPointerOverControl) roomViewCanvas.style.cursor = 'pointer';
+      else if (roomViewPlaying && rvToyInside) roomViewCanvas.style.cursor = 'none';
+      else roomViewCanvas.style.cursor = 'grab';
+    }
+
+    function rvSetPlaying(enabled) {
+      roomViewPlaying = enabled;
+      rvLastToyTarget = null;
+      if (enabled) {
+        loadRoomView();
+        rvEnsureMochiSafe();
+        rvMochiSettle(600);
+        rvNextWanderAt = Date.now() + 600;
+      } else {
+        rvStopMochiMovement(false);
+        rvMochiPlay('waiting');
+        rvSaveMochiPos();
+      }
+      rvRefreshPointerState({ follow: false });
+      rvSetRoomCursor();
+    }
+
+    function rvPointOnSegment(point, a, b) {
+      const cross = (point.y - a.y) * (b.x - a.x) - (point.x - a.x) * (b.y - a.y);
+      if (Math.abs(cross) > 0.01) return false;
+      const dot = (point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y);
+      if (dot < 0) return false;
+      return dot <= (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
+    }
+
+    function rvPointInPolygon(point, polygon) {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const a = polygon[i], b = polygon[j];
+        if (rvPointOnSegment(point, a, b)) return true;
+        const crosses = (a.y > point.y) !== (b.y > point.y)
+          && point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
+        if (crosses) inside = !inside;
+      }
+      return inside;
+    }
+
+    function rvRowsBounds(rows) {
+      if (!rows.length) return null;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const row of rows) {
+        minX = Math.min(minX, row.minX);
+        maxX = Math.max(maxX, row.maxX);
+        minY = Math.min(minY, row.y);
+        maxY = Math.max(maxY, row.y);
+      }
+      return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+    }
+
+    function rvRowsFromRect(rect) {
+      const rows = [];
+      const startY = Math.ceil(rect.y);
+      const endY = Math.floor(rect.y + rect.h - 1);
+      for (let y = startY; y <= endY; y++) rows.push({ y, minX: rect.x, maxX: rect.x + rect.w - 1 });
+      return rows;
+    }
+
+    function rvToWorldFootprint(localRows, x, y, layer = 'solid') {
+      const rows = localRows.map(row => ({
+        y: Math.round(y + row.y),
+        minX: x + row.minX,
+        maxX: x + row.maxX,
+      }));
+      return { layer, rows, rect: rvRowsBounds(rows) || { x, y, w: 1, h: 1 } };
+    }
+
+    function rvRectDistance(a, b) {
+      const dx = Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), 0);
+      const dy = Math.max(b.y - (a.y + a.h), a.y - (b.y + b.h), 0);
+      return Math.hypot(dx, dy);
+    }
+
+    function rvFootprintsOverlap(a, b, tolerance = 2) {
+      const overlapX = Math.min(a.rect.x + a.rect.w, b.rect.x + b.rect.w) - Math.max(a.rect.x, b.rect.x);
+      const overlapY = Math.min(a.rect.y + a.rect.h, b.rect.y + b.rect.h) - Math.max(a.rect.y, b.rect.y);
+      if (overlapX <= tolerance || overlapY <= tolerance) return false;
+
+      const bRows = new Map();
+      for (const row of b.rows) {
+        const key = Math.round(row.y);
+        const list = bRows.get(key) || [];
+        list.push(row);
+        bRows.set(key, list);
+      }
+      for (const aRow of a.rows) {
+        const matches = bRows.get(Math.round(aRow.y));
+        if (!matches) continue;
+        for (const bRow of matches) {
+          const rowOverlap = Math.min(aRow.maxX, bRow.maxX) - Math.max(aRow.minX, bRow.minX) + 1;
+          if (rowOverlap > tolerance) return true;
+        }
+      }
+      return false;
+    }
+
+    function rvFootprintFitsFloor(footprint) {
+      return !!footprint?.rows?.length && footprint.rows.every(row => {
+        const points = [
+          { x: row.minX, y: row.y },
+          { x: row.maxX, y: row.y },
+          { x: (row.minX + row.maxX) / 2, y: row.y },
+        ];
+        return points.every(point => rvPointInPolygon(point, RV_ROOM_ZONES.floor));
+      });
+    }
+
+    function rvPointInFootprint(point, footprint, padding = 0) {
+      if (!footprint?.rows?.length) return false;
+      const y = Math.round(point.y);
+      for (const row of footprint.rows) {
+        if (Math.abs(Math.round(row.y) - y) > padding) continue;
+        if (point.x >= row.minX - padding && point.x <= row.maxX + padding) return true;
+      }
+      return false;
+    }
+
+    function rvGetRoomItemDims(def) {
+      const img = def ? roomItemImgs[def.src] : null;
+      return {
+        w: def?.cropW || def?.w || img?.naturalWidth || 32,
+        h: def?.cropH || def?.h || img?.naturalHeight || 32,
+      };
+    }
+
+    function rvFallbackShape(def) {
+      const dims = rvGetRoomItemDims(def);
+      const rows = Array.from({ length: dims.h }, () => ({ minX: 0, maxX: dims.w - 1 }));
+      return { ready: false, sourceW: dims.w, sourceH: dims.h, visible: { x: 0, y: 0, w: dims.w, h: dims.h }, rows };
+    }
+
+    function rvGetSpriteShape(def) {
+      if (!def) return rvFallbackShape(null);
+      const img = roomItemImgs[def.src];
+      const sourceW = def.cropW || def.w || img?.naturalWidth || 32;
+      const sourceH = def.cropH || def.h || img?.naturalHeight || 32;
+      const fallback = rvFallbackShape({ ...def, cropW: sourceW, cropH: sourceH });
+      if (!img) return fallback;
+      const key = `${def.id}:${def.src}:${def.cropX || 0}:${def.cropY || 0}:${sourceW}x${sourceH}`;
+      if (rvShapeCache.has(key)) return rvShapeCache.get(key);
+
+      const scan = document.createElement('canvas');
+      scan.width = sourceW;
+      scan.height = sourceH;
+      const scanCtx = scan.getContext('2d', { willReadFrequently: true });
+      scanCtx.clearRect(0, 0, sourceW, sourceH);
+      scanCtx.drawImage(img, def.cropX || 0, def.cropY || 0, sourceW, sourceH, 0, 0, sourceW, sourceH);
+      const pixels = scanCtx.getImageData(0, 0, sourceW, sourceH).data;
+      const rows = Array.from({ length: sourceH }, () => null);
+      let minX = sourceW, minY = sourceH, maxX = -1, maxY = -1;
+      for (let y = 0; y < sourceH; y++) {
+        let rowMin = sourceW, rowMax = -1;
+        for (let x = 0; x < sourceW; x++) {
+          if (pixels[(y * sourceW + x) * 4 + 3] <= SPRITE_ALPHA_THRESHOLD) continue;
+          rowMin = Math.min(rowMin, x);
+          rowMax = Math.max(rowMax, x);
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+        if (rowMax >= 0) rows[y] = { minX: rowMin, maxX: rowMax };
+      }
+      const shape = maxX >= 0
+        ? { ready: true, sourceW, sourceH, visible: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 }, rows }
+        : fallback;
+      rvShapeCache.set(key, shape);
+      return shape;
+    }
+
+    function rvItemFootprintRule(id, dims) {
+      if (id === 'deco_040') return { kind: 'rows', rows: RV_BIG_BED_ROWS, layer: 'solid' };
+      if (id?.startsWith('bowl-') || id?.startsWith('fish-') || id?.startsWith('ball-') || id === 'toy-cat' || id === 'toy-mouse') {
+        return { kind: 'visible', inset: 1, layer: 'flat' };
+      }
+      if (id?.startsWith('bed-')) return { kind: 'contact', contactHeight: Math.min(30, dims.h), layer: 'solid' };
+      if (id?.startsWith('home-')) return { kind: 'contact', contactHeight: Math.min(22, dims.h), layer: 'solid' };
+      if (id?.startsWith('scratch-') || id?.startsWith('playground')) return { kind: 'contact', contactHeight: Math.min(18, dims.h), layer: 'solid' };
+      if (id === 'catfood') return { kind: 'contact', contactHeight: 12, layer: 'solid' };
+      return { kind: 'contact', contactHeight: Math.max(8, Math.min(18, Math.round(dims.h * 0.26))), layer: 'solid' };
+    }
+
+    function rvLocalRowsForRule(shape, rule, dims) {
+      if (rule.kind === 'rows') return rule.rows.map(row => ({ ...row }));
+      if (rule.kind === 'visible') {
+        const rows = [];
+        for (let y = shape.visible.y; y < shape.visible.y + shape.visible.h; y++) {
+          const row = shape.rows[y];
+          if (!row) continue;
+          rows.push({ y, minX: row.minX + (rule.inset || 0), maxX: row.maxX - (rule.inset || 0) });
+        }
+        return rows.filter(row => row.maxX >= row.minX);
+      }
+      const contactHeight = Math.max(1, Math.min(rule.contactHeight || 10, shape.visible.h || dims.h));
+      const startY = (shape.visible.y || 0) + (shape.visible.h || dims.h) - contactHeight;
+      const endY = (shape.visible.y || 0) + (shape.visible.h || dims.h) - 1;
+      const rows = [];
+      for (let y = startY; y <= endY; y++) {
+        const row = shape.rows[y];
+        if (row) rows.push({ y, minX: row.minX + 1, maxX: row.maxX - 1 });
+      }
+      if (rows.length) return rows.filter(row => row.maxX >= row.minX);
+      const width = Math.max(12, dims.w * 0.58);
+      return rvRowsFromRect({ x: (dims.w - width) / 2, y: dims.h - contactHeight - 2, w: width, h: contactHeight });
+    }
+
+    function rvGetCachedEntryForItem(item) {
+      return roomViewEntries.find(entry => entry.item === item) || null;
+    }
+
+    function rvComputeItemFootprint(item) {
+      const def = findCatalogItem(item.id);
+      if (!def) return null;
+      ensureDecoImg(def.src);
+      const dims = rvGetRoomItemDims(def);
+      const shape = rvGetSpriteShape(def);
+      const rule = rvItemFootprintRule(item.id, dims);
+      const rows = rvLocalRowsForRule(shape, rule, dims);
+      return rvToWorldFootprint(rows, item.x, item.y, rule.layer || 'solid');
+    }
+
+    function rvGetItemFootprint(item) {
+      return rvGetCachedEntryForItem(item)?.footprint || rvComputeItemFootprint(item);
+    }
+
+    function rvComputeItemVisibleFootprint(item) {
+      const def = findCatalogItem(item.id);
+      if (!def) return null;
+      ensureDecoImg(def.src);
+      const dims = rvGetRoomItemDims(def);
+      const shape = rvGetSpriteShape(def);
+      if (!shape.ready) return rvToWorldFootprint(rvRowsFromRect({ x: 0, y: 0, w: dims.w, h: dims.h }), item.x, item.y, 'visible');
+      const rows = [];
+      for (let y = shape.visible.y; y < shape.visible.y + shape.visible.h; y++) {
+        const row = shape.rows[y];
+        if (row) rows.push({ y, minX: row.minX, maxX: row.maxX });
+      }
+      return rvToWorldFootprint(rows, item.x, item.y, 'visible');
+    }
+
+    function rvGetItemVisibleFootprint(item) {
+      return rvGetCachedEntryForItem(item)?.visibleFootprint || rvComputeItemVisibleFootprint(item);
+    }
+
+    function rvRebuildRoomViewCache() {
+      roomViewEntries = [];
       for (const item of roomViewItems) {
         const def = findCatalogItem(item.id);
         if (!def) continue;
         ensureDecoImg(def.src);
-        const img = roomItemImgs[def.src];
-        if (!img) continue;
-        const sx = def.cropX || 0, sy = def.cropY || 0;
-        const sw = def.cropW || def.w || img.naturalWidth;
-        const sh = def.cropH || def.h || img.naturalHeight;
-        rvCtx.drawImage(img, sx, sy, sw, sh, item.x * scale, item.y * scale, sw * scale, sh * scale);
+        const img = roomItemImgs[def.src] || null;
+        const sx = def.cropX || 0;
+        const sy = def.cropY || 0;
+        const sw = def.cropW || def.w || img?.naturalWidth || 32;
+        const sh = def.cropH || def.h || img?.naturalHeight || 32;
+        const footprint = rvComputeItemFootprint(item);
+        const visibleFootprint = rvComputeItemVisibleFootprint(item);
+        const onFloor = footprint && rvFootprintFitsFloor(footprint);
+        roomViewEntries.push({
+          item,
+          def,
+          img,
+          sx,
+          sy,
+          sw,
+          sh,
+          footprint,
+          visibleFootprint,
+          onFloor,
+          sortY: onFloor ? footprint.rect.y + footprint.rect.h : item.y + sh,
+        });
+      }
+      roomViewEntries.sort((a, b) => a.sortY - b.sortY);
+      rvBlockingFootprints = roomViewEntries
+        .filter(entry => entry.onFloor && entry.footprint?.layer !== 'underlay')
+        .map(entry => entry.footprint);
+      rvFloorItemEntries = roomViewEntries.filter(entry => entry.onFloor);
+      rvOccluderEntries = roomViewEntries.filter(entry => (
+        entry.onFloor
+        && entry.footprint?.layer !== 'underlay'
+        && entry.footprint?.layer !== 'flat'
+        && entry.visibleFootprint
+      ));
+    }
+
+    function rvMochiHasClearUpperBodyAt(x, y) {
+      const mochiSort = rvMochiFootprintAt(x, y).rect;
+      const mochiSortY = mochiSort.y + mochiSort.h;
+      const protectedPoints = [
+        { x: x + 30, y: y + 17 },
+        { x: x + 24, y: y + 25 },
+        { x: x + 36, y: y + 25 },
+        { x: x + 30, y: y + 34 },
+        { x: x + 30, y: y + 42 },
+      ];
+
+      for (const entry of rvOccluderEntries) {
+        const footprint = entry.footprint;
+        const itemSortY = footprint.rect.y + footprint.rect.h;
+        if (itemSortY <= mochiSortY + 2) continue;
+        const visible = entry.visibleFootprint;
+        if (!visible) continue;
+        if (protectedPoints.some(point => rvPointInFootprint(point, visible, 2))) return false;
       }
 
-      // Draw Mochi in room (using current animation) — draw at 48px source size for visibility
-      const mochiPos = JSON.parse(localStorage.getItem('mochiPos_' + (localStorage.getItem('currentRoom') || '1')) || '{"x":240,"y":350}');
-      const a = ANIMS[curAnim], img = imgs[curAnim];
-      if (a && img) {
-        const f = Math.max(0, frame - 1);
-        const mochiDraw = 64;
-        rvCtx.drawImage(img, f * S, 0, S, S, mochiPos.x * scale, mochiPos.y * scale, mochiDraw * scale, mochiDraw * scale);
+      return true;
+    }
+
+    function rvGetBlockingFootprints() {
+      return rvBlockingFootprints;
+    }
+
+    function rvMochiFootprintAt(x, y) {
+      return rvToWorldFootprint(RV_MOCHI_BASE_ROWS, Math.round(x), Math.round(y), 'solid');
+    }
+
+    function rvInflateFootprint(footprint, amount = 0) {
+      const expand = Math.max(0, Math.round(amount));
+      if (!expand || !footprint?.rows?.length) return footprint;
+      const rowsByY = new Map();
+      for (const row of footprint.rows) {
+        for (let dy = -expand; dy <= expand; dy++) {
+          const y = Math.round(row.y + dy);
+          const existing = rowsByY.get(y);
+          const next = { y, minX: row.minX - expand, maxX: row.maxX + expand };
+          rowsByY.set(y, existing
+            ? { y, minX: Math.min(existing.minX, next.minX), maxX: Math.max(existing.maxX, next.maxX) }
+            : next);
+        }
       }
+      const rows = [...rowsByY.values()].sort((a, b) => a.y - b.y);
+      return { ...footprint, rows, rect: rvRowsBounds(rows) || footprint.rect };
+    }
+
+    function rvIsMochiWalkable(x, y, blockers = rvGetBlockingFootprints(), clearance = 0) {
+      if (x < 0 || y < 0 || x + RV_MOCHI_DRAW_SIZE > RV_WORLD || y + RV_MOCHI_DRAW_SIZE > RV_WORLD) return false;
+      const footprint = rvMochiFootprintAt(x, y);
+      if (!rvFootprintFitsFloor(footprint)) return false;
+      const testFootprint = clearance > 0 ? rvInflateFootprint(footprint, clearance) : footprint;
+      return !blockers.some(blocker => rvFootprintsOverlap(testFootprint, blocker, 1));
+    }
+
+    function rvMochiClearance(x, y, blockers = rvGetBlockingFootprints()) {
+      const footprint = rvMochiFootprintAt(x, y);
+      if (!rvFootprintFitsFloor(footprint)) return -Infinity;
+      let clearance = Infinity;
+      for (const blocker of blockers) {
+        if (rvFootprintsOverlap(footprint, blocker, 1)) return -Infinity;
+        clearance = Math.min(clearance, rvRectDistance(footprint.rect, blocker.rect));
+      }
+      return clearance === Infinity ? 999 : clearance;
+    }
+
+    function rvTopLeftFromFootCenter(x, y) {
+      return { x: Math.round(x - RV_MOCHI_FOOT_CENTER.x), y: Math.round(y - RV_MOCHI_FOOT_CENTER.y) };
+    }
+
+    function rvFindNearestWalkable(x, y, blockers = rvGetBlockingFootprints(), maxRadius = 160, options = {}) {
+      const step = RV_MOCHI_PATH_GRID / 2;
+      const preferClearance = !!options.preferClearance;
+      const requireVisibility = !!options.requireVisibility;
+      const targetClearance = options.targetClearance ?? RV_MOCHI_TARGET_CLEARANCE;
+      let best = null;
+      let bestScore = Infinity;
+      const consider = (candidate) => {
+        if (!rvIsMochiWalkable(candidate.x, candidate.y, blockers)) return;
+        if (requireVisibility && !rvMochiHasClearUpperBodyAt(candidate.x, candidate.y)) return;
+        const dist = Math.hypot(candidate.x - x, candidate.y - y);
+        const clearance = rvMochiClearance(candidate.x, candidate.y, blockers);
+        const cramped = preferClearance && clearance < targetClearance ? (targetClearance - Math.max(0, clearance)) * 3 : 0;
+        const score = dist + cramped - Math.min(Math.max(clearance, 0), targetClearance) * 0.55;
+        if (score < bestScore) {
+          best = { x: Math.round(candidate.x), y: Math.round(candidate.y), clearance };
+          bestScore = score;
+        }
+      };
+      consider({ x: Math.round(x), y: Math.round(y) });
+      for (let radius = step; radius <= maxRadius; radius += step) {
+        for (let dx = -radius; dx <= radius; dx += step) {
+          consider({ x: Math.round(x + dx), y: Math.round(y - radius) });
+          consider({ x: Math.round(x + dx), y: Math.round(y + radius) });
+        }
+        for (let dy = -radius + step; dy <= radius - step; dy += step) {
+          consider({ x: Math.round(x - radius), y: Math.round(y + dy) });
+          consider({ x: Math.round(x + radius), y: Math.round(y + dy) });
+        }
+        if (best && (!preferClearance || best.clearance >= targetClearance)) return { x: best.x, y: best.y };
+      }
+      return best ? { x: best.x, y: best.y } : null;
+    }
+
+    function rvLineWalkable(from, to, blockers, clearance = 0) {
+      const dist = Math.hypot(to.x - from.x, to.y - from.y);
+      const steps = Math.max(1, Math.ceil(dist / (RV_MOCHI_PATH_GRID / 2)));
+      for (let i = 1; i <= steps; i++) {
+        const p = i / steps;
+        const x = from.x + (to.x - from.x) * p;
+        const y = from.y + (to.y - from.y) * p;
+        if (!rvIsMochiWalkable(x, y, blockers, clearance)) return false;
+      }
+      return true;
+    }
+
+    function rvSimplifyPath(path, blockers) {
+      if (path.length <= 2) return path;
+      const simplified = [path[0]];
+      let anchor = 0;
+      while (anchor < path.length - 1) {
+        let next = path.length - 1;
+        while (next > anchor + 1 && !rvLineWalkable(path[anchor], path[next], blockers)) next--;
+        simplified.push(path[next]);
+        anchor = next;
+      }
+      return simplified;
+    }
+
+    function rvFindPath(startX, startY, endX, endY, blockers = rvGetBlockingFootprints()) {
+      const start = rvFindNearestWalkable(startX, startY, blockers, 96);
+      const goal = rvIsMochiWalkable(endX, endY, blockers)
+        ? { x: Math.round(endX), y: Math.round(endY) }
+        : rvFindNearestWalkable(endX, endY, blockers, 180, { preferClearance: true });
+      if (!start || !goal) return [];
+      if (rvLineWalkable(start, goal, blockers)) return [goal];
+
+      const keyFor = (x, y) => `${x},${y}`;
+      const heuristic = node => Math.hypot(node.x - goal.x, node.y - goal.y);
+      const startNode = {
+        x: Math.round(start.x / RV_MOCHI_PATH_GRID) * RV_MOCHI_PATH_GRID,
+        y: Math.round(start.y / RV_MOCHI_PATH_GRID) * RV_MOCHI_PATH_GRID,
+      };
+      const goalNode = {
+        x: Math.round(goal.x / RV_MOCHI_PATH_GRID) * RV_MOCHI_PATH_GRID,
+        y: Math.round(goal.y / RV_MOCHI_PATH_GRID) * RV_MOCHI_PATH_GRID,
+      };
+      const open = [{ ...startNode, g: 0, f: heuristic(startNode), parent: null }];
+      const best = new Map([[keyFor(startNode.x, startNode.y), open[0]]]);
+      const closed = new Set();
+      const dirs = [
+        [RV_MOCHI_PATH_GRID, 0, 1], [-RV_MOCHI_PATH_GRID, 0, 1],
+        [0, RV_MOCHI_PATH_GRID, 1], [0, -RV_MOCHI_PATH_GRID, 1],
+        [RV_MOCHI_PATH_GRID, RV_MOCHI_PATH_GRID, 1.4],
+        [RV_MOCHI_PATH_GRID, -RV_MOCHI_PATH_GRID, 1.4],
+        [-RV_MOCHI_PATH_GRID, RV_MOCHI_PATH_GRID, 1.4],
+        [-RV_MOCHI_PATH_GRID, -RV_MOCHI_PATH_GRID, 1.4],
+      ];
+      let visited = 0;
+      while (open.length && visited++ < RV_MOCHI_PATH_MAX_NODES) {
+        open.sort((a, b) => a.f - b.f);
+        const current = open.shift();
+        const currentKey = keyFor(current.x, current.y);
+        if (closed.has(currentKey)) continue;
+        closed.add(currentKey);
+        if (Math.hypot(current.x - goalNode.x, current.y - goalNode.y) <= RV_MOCHI_PATH_GRID) {
+          const path = [goal];
+          let node = current;
+          while (node.parent) {
+            path.unshift({ x: node.x, y: node.y });
+            node = node.parent;
+          }
+          return rvSimplifyPath(path, blockers);
+        }
+        for (const [dx, dy, cost] of dirs) {
+          const nx = current.x + dx, ny = current.y + dy;
+          const key = keyFor(nx, ny);
+          if (closed.has(key) || !rvIsMochiWalkable(nx, ny, blockers)) continue;
+          if (dx && dy && (!rvIsMochiWalkable(current.x + dx, current.y, blockers) || !rvIsMochiWalkable(current.x, current.y + dy, blockers))) continue;
+          const g = current.g + cost;
+          const previous = best.get(key);
+          if (previous && previous.g <= g) continue;
+          const node = { x: nx, y: ny, g, f: g + heuristic({ x: nx, y: ny }), parent: current };
+          best.set(key, node);
+          open.push(node);
+        }
+      }
+      return [];
+    }
+
+    function rvPathDistance(start, path) {
+      let distance = 0;
+      let previous = start;
+      for (const point of path) {
+        distance += Math.hypot(point.x - previous.x, point.y - previous.y);
+        previous = point;
+      }
+      return distance;
+    }
+
+    function rvFaceToward(x) {
+      rvMochiFlip = x > rvMochiX + RV_MOCHI_FOOT_CENTER.x;
+    }
+
+    function rvMochiPlay(name, cb) {
+      if (!ANIMS[name]) return;
+      rvMochiAnim = name;
+      rvMochiFrame = 0;
+      rvMochiLastT = 0;
+      rvMochiAnimCb = cb || null;
+    }
+
+    function rvMochiSettle(delay = null) {
+      const choices = ['waiting', 'idle', 'idle2'];
+      rvMochiPlay(choices[Math.floor(Math.random() * choices.length)]);
+      rvNextWanderAt = Date.now() + (delay ?? 2200 + Math.random() * 4200);
+    }
+
+    function rvStopMochiMovement(settle = true) {
+      rvMochiPath = [];
+      rvMochiTargetX = null;
+      rvMochiTargetY = null;
+      rvMochiDestX = null;
+      rvMochiDestY = null;
+      rvMochiMoveMode = 'walk';
+      rvMochiHopStartX = null;
+      rvMochiHopStartY = null;
+      rvMochiHopDistance = 1;
+      rvMochiMoveCb = null;
+      if (settle) rvMochiSettle();
+    }
+
+    function rvSetNextWaypoint() {
+      const next = rvMochiPath.shift();
+      if (!next) {
+        rvMochiTargetX = null;
+        rvMochiTargetY = null;
+        rvMochiDestX = null;
+        rvMochiDestY = null;
+        rvMochiMoveMode = 'walk';
+        rvMochiHopStartX = null;
+        rvMochiHopStartY = null;
+        rvMochiHopDistance = 1;
+        rvSaveMochiPos();
+        if (rvMochiMoveCb) { const cb = rvMochiMoveCb; rvMochiMoveCb = null; cb(); }
+        else rvMochiSettle();
+        return;
+      }
+      rvMochiTargetX = next.x;
+      rvMochiTargetY = next.y;
+      rvMochiHopStartX = rvMochiMoveMode === 'hop' ? rvMochiX : null;
+      rvMochiHopStartY = rvMochiMoveMode === 'hop' ? rvMochiY : null;
+      rvMochiHopDistance = Math.max(1, Math.hypot(rvMochiTargetX - rvMochiX, rvMochiTargetY - rvMochiY));
+      rvFaceToward(rvMochiTargetX + RV_MOCHI_FOOT_CENTER.x);
+      if (rvMochiAnim !== 'excited') rvMochiPlay('excited');
+    }
+
+    function rvBeginMovement(path, destination, cb, moveMode = 'walk') {
+      if (!path?.length) return false;
+      rvMochiDestX = destination.x;
+      rvMochiDestY = destination.y;
+      rvMochiPath = path;
+      rvMochiMoveCb = cb || null;
+      rvMochiMoveMode = moveMode;
+      rvSetNextWaypoint();
+      return true;
+    }
+
+    function rvMoveTo(tx, ty, cb, options = {}) {
+      const blockers = rvGetBlockingFootprints();
+      const safeTarget = options.safeTarget || rvFindNearestWalkable(tx, ty, blockers, 180, {
+        preferClearance: true,
+        requireVisibility: options.requireVisibility !== false,
+      });
+      if (!safeTarget) {
+        rvStopMochiMovement(true);
+        return false;
+      }
+      if (!rvIsMochiWalkable(rvMochiX, rvMochiY, blockers)) {
+        const rescue = rvFindNearestWalkable(rvMochiX, rvMochiY, blockers, 180, { preferClearance: true, requireVisibility: true });
+        if (rescue) return rvBeginMovement([rescue], safeTarget, () => rvMoveTo(safeTarget.x, safeTarget.y, cb, { ...options, safeTarget }), 'hop');
+      }
+      const directDistance = Math.hypot(safeTarget.x - rvMochiX, safeTarget.y - rvMochiY);
+      const maxHopDistance = options.maxHopDistance || RV_MOCHI_MAX_HOP_DISTANCE;
+      if (options.preferHop && directDistance <= maxHopDistance) {
+        return rvBeginMovement([safeTarget], safeTarget, cb, 'hop');
+      }
+
+      const path = rvFindPath(rvMochiX, rvMochiY, safeTarget.x, safeTarget.y, blockers);
+      const directBlocked = !rvLineWalkable({ x: rvMochiX, y: rvMochiY }, safeTarget, blockers);
+      const pathDistance = path.length ? rvPathDistance({ x: rvMochiX, y: rvMochiY }, path) : Infinity;
+      const shouldHop = directDistance <= maxHopDistance
+        && (options.preferHop || !path.length || (directBlocked && pathDistance > directDistance * 1.35));
+      if (shouldHop) return rvBeginMovement([safeTarget], safeTarget, cb, 'hop');
+      if (path.length) return rvBeginMovement(path, safeTarget, cb, 'walk');
+      rvStopMochiMovement(true);
+      return false;
+    }
+
+    function rvEnsureMochiSafe() {
+      const blockers = rvGetBlockingFootprints();
+      if (rvIsMochiWalkable(rvMochiX, rvMochiY, blockers) && rvMochiHasClearUpperBodyAt(rvMochiX, rvMochiY)) return;
+      const safe = rvFindNearestWalkable(rvMochiX, rvMochiY, blockers, 220, { preferClearance: true, requireVisibility: true });
+      if (safe) {
+        rvMochiX = safe.x;
+        rvMochiY = safe.y;
+        rvSaveMochiPos();
+      }
+    }
+
+    function rvRandomWalkablePosition() {
+      const blockers = rvGetBlockingFootprints();
+      for (let i = 0; i < 90; i++) {
+        const a = RV_ROOM_ZONES.floor[Math.floor(Math.random() * RV_ROOM_ZONES.floor.length)];
+        const b = RV_ROOM_ZONES.floor[Math.floor(Math.random() * RV_ROOM_ZONES.floor.length)];
+        const t = Math.random();
+        const foot = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+        if (!rvPointInPolygon(foot, RV_ROOM_ZONES.floor)) continue;
+        const candidate = rvTopLeftFromFootCenter(foot.x, foot.y);
+        const safe = rvFindNearestWalkable(candidate.x, candidate.y, blockers, 64, { preferClearance: true, requireVisibility: true });
+        if (safe) return safe;
+      }
+      return rvFindNearestWalkable(224, 300, blockers, 220, { preferClearance: true, requireVisibility: true });
+    }
+
+    function rvFindInteractionTarget(item) {
+      const entry = rvGetCachedEntryForItem(item);
+      const fp = entry?.footprint || rvGetItemFootprint(item);
+      if (!fp) return null;
+      const rect = fp.rect;
+      const cx = rect.x + rect.w / 2;
+      const cy = rect.y + rect.h / 2;
+      const candidates = [
+        rvTopLeftFromFootCenter(cx, rect.y + rect.h + 12),
+        rvTopLeftFromFootCenter(cx, rect.y - 10),
+        rvTopLeftFromFootCenter(rect.x - 12, cy),
+        rvTopLeftFromFootCenter(rect.x + rect.w + 12, cy),
+      ];
+      const blockers = rvGetBlockingFootprints();
+      let best = null, bestScore = Infinity;
+      for (const candidate of candidates) {
+        const safe = rvFindNearestWalkable(candidate.x, candidate.y, blockers, 96, { preferClearance: true, requireVisibility: true });
+        if (!safe) continue;
+        const score = Math.hypot(safe.x - rvMochiX, safe.y - rvMochiY) - Math.min(rvMochiClearance(safe.x, safe.y, blockers), RV_MOCHI_TARGET_CLEARANCE);
+        if (score < bestScore) {
+          best = safe;
+          bestScore = score;
+        }
+      }
+      return best;
+    }
+
+    function rvStartWander() {
+      if (!roomViewPlaying || rvToyInside || rvMochiTargetX !== null) return;
+      const item = rvFloorItemEntries.length && Math.random() < 0.4
+        ? rvFloorItemEntries[Math.floor(Math.random() * rvFloorItemEntries.length)].item
+        : null;
+      const target = item ? rvFindInteractionTarget(item) : rvRandomWalkablePosition();
+      if (!target) {
+        rvMochiSettle(2500);
+        return;
+      }
+      rvMoveTo(target.x, target.y, () => {
+        if (item?.id?.startsWith('bed-') || item?.id?.startsWith('home-') || item?.id === 'deco_040') {
+          rvMochiPlay('laydown', () => {
+            rvMochiPlay('sleep');
+            rvNextWanderAt = Date.now() + 3000 + Math.random() * 4000;
+          });
+        } else if (item?.id?.startsWith('bowl-') || item?.id?.startsWith('fish-') || item?.id === 'catfood') {
+          rvMochiPlay('eating', () => rvMochiSettle());
+        } else if (Math.random() < 0.45) {
+          rvMochiPlay('dance', () => rvMochiSettle());
+        } else {
+          rvMochiSettle();
+        }
+      }, { preferHop: Math.random() < 0.55 });
+    }
+
+    function rvMochiJumpProgress() {
+      if (rvMochiMoveMode !== 'hop' || rvMochiHopStartX === null || rvMochiTargetX === null) return 0;
+      const remaining = Math.hypot(rvMochiTargetX - rvMochiX, rvMochiTargetY - rvMochiY);
+      return Math.max(0, Math.min(1, 1 - remaining / Math.max(1, rvMochiHopDistance)));
+    }
+
+    function rvMochiHopHeight() {
+      return Math.max(18, Math.min(48, 12 + rvMochiHopDistance * 0.13));
+    }
+
+    function rvUpdateMochi(t) {
+      const now = Date.now();
+      if (roomViewPlaying && rvMochiTargetX !== null) {
+        const dx = rvMochiTargetX - rvMochiX;
+        const dy = rvMochiTargetY - rvMochiY;
+        const dist = Math.hypot(dx, dy);
+        const speed = rvMochiMoveMode === 'hop' ? Math.min(RV_MOCHI_HOP_SPEED, Math.max(RV_MOCHI_SPEED, rvMochiHopDistance / 52)) : RV_MOCHI_SPEED;
+        if (dist <= speed) {
+          rvMochiX = rvMochiTargetX;
+          rvMochiY = rvMochiTargetY;
+          rvSetNextWaypoint();
+        } else {
+          rvMochiX += (dx / dist) * speed;
+          rvMochiY += (dy / dist) * speed;
+          rvFaceToward(rvMochiTargetX + RV_MOCHI_FOOT_CENTER.x);
+          if (rvMochiAnim !== 'excited') rvMochiPlay('excited');
+        }
+      } else if (roomViewPlaying && !rvToyInside && now >= rvNextWanderAt) {
+        if (Math.random() < 0.24) {
+          const anim = ['lick', 'surprised', 'waiting', 'idle2'][Math.floor(Math.random() * 4)];
+          rvMochiPlay(anim, () => rvMochiSettle());
+          rvNextWanderAt = now + 1800 + Math.random() * 2600;
+        } else {
+          rvStartWander();
+          rvNextWanderAt = now + 4500 + Math.random() * 6500;
+        }
+      }
+
+      const anim = ANIMS[rvMochiAnim];
+      if (anim && t - rvMochiLastT >= anim.speed) {
+        rvMochiLastT = t;
+        rvMochiFrame++;
+        if (rvMochiFrame >= anim.frames) {
+          rvMochiFrame = 0;
+          if (rvMochiAnimCb) { const cb = rvMochiAnimCb; rvMochiAnimCb = null; cb(); }
+        }
+      }
+    }
+
+    function rvToyLayout() {
+      const def = findCatalogItem('toy-cat');
+      const img = def && roomItemImgs[def.src];
+      if (!def || !img) return null;
+      const sw = def.cropW || def.w;
+      const sh = def.cropH || def.h;
+      const frames = Math.max(1, Math.floor(def.w / sw));
+      const frame = Math.floor(Date.now() / 120) % frames;
+      const scale = 2;
+      return {
+        img, sw, sh, frame,
+        sx: (def.cropX || 0) + frame * sw,
+        sy: def.cropY || 0,
+        dw: sw * scale,
+        dh: sh * scale,
+      };
+    }
+
+    function rvToyChasePoint(cursorX = rvToyX, cursorY = rvToyY) {
+      const layout = rvToyLayout();
+      if (!layout) return { x: cursorX, y: cursorY };
+      const pom = RV_TOY_POM_POINTS[layout.frame] || RV_TOY_POM_POINTS[0];
+      return {
+        x: cursorX - layout.dw / 2 + pom.x * 2,
+        y: cursorY - layout.dh / 2 + pom.y * 2,
+      };
+    }
+
+    function rvRequestToyFollow(force = false) {
+      if (!roomViewPlaying || !rvToyInside) return;
+      const now = Date.now();
+      if (!force && now - rvLastToyFollowAt < 170) return;
+      const chase = rvToyChasePoint();
+      const target = rvTopLeftFromFootCenter(chase.x, chase.y);
+      if (!force && rvLastToyTarget && Math.hypot(rvLastToyTarget.x - target.x, rvLastToyTarget.y - target.y) < 24) return;
+      const blockers = rvGetBlockingFootprints();
+      const safe = rvFindNearestWalkable(target.x, target.y, blockers, 200, { preferClearance: true, requireVisibility: true });
+      if (!safe) return;
+      if (rvMochiMoveMode === 'hop' && !force && rvMochiJumpProgress() < 0.65) return;
+      rvLastToyFollowAt = now;
+      rvLastToyTarget = safe;
+      rvFaceToward(chase.x);
+      if (Math.hypot(safe.x - rvMochiX, safe.y - rvMochiY) < 8) {
+        if (rvMochiTargetX === null) rvMochiSettle();
+        return;
+      }
+      rvMoveTo(safe.x, safe.y, () => rvMochiSettle(), { safeTarget: safe, preferHop: true, requireVisibility: true });
+    }
+
+    function rvDrawToyCursor() {
+      if (!roomViewPlaying || !rvToyInside) return;
+      const layout = rvToyLayout();
+      if (!layout) return;
+      rvCtx.save();
+      rvCtx.globalAlpha = 0.96;
+      rvCtx.drawImage(
+        layout.img,
+        layout.sx, layout.sy, layout.sw, layout.sh,
+        Math.round((rvToyX - layout.dw / 2) * RV_SCALE),
+        Math.round((rvToyY - layout.dh / 2) * RV_SCALE),
+        Math.round(layout.dw * RV_SCALE),
+        Math.round(layout.dh * RV_SCALE)
+      );
+      rvCtx.restore();
+    }
+
+    function rvDrawMochi() {
+      const anim = ANIMS[rvMochiAnim] || ANIMS.waiting;
+      const img = imgs[rvMochiAnim] || imgs.waiting;
+      if (!anim || !img) return;
+      const frame = Math.max(0, Math.min(rvMochiFrame, anim.frames - 1));
+      const jumpProgress = rvMochiJumpProgress();
+      const jumpOffset = rvMochiMoveMode === 'hop' ? Math.sin(jumpProgress * Math.PI) * rvMochiHopHeight() : 0;
+      if (rvMochiMoveMode === 'hop') {
+        const shadowW = Math.max(18, 34 - Math.sin(jumpProgress * Math.PI) * 10) * RV_SCALE;
+        rvCtx.save();
+        rvCtx.fillStyle = `rgba(26,23,31,${0.18 - Math.sin(jumpProgress * Math.PI) * 0.06})`;
+        rvCtx.beginPath();
+        rvCtx.ellipse(
+          (rvMochiX + RV_MOCHI_FOOT_CENTER.x) * RV_SCALE,
+          (rvMochiY + RV_MOCHI_FOOT_CENTER.y + 4) * RV_SCALE,
+          shadowW / 2,
+          4 * RV_SCALE,
+          0, 0, Math.PI * 2
+        );
+        rvCtx.fill();
+        rvCtx.restore();
+      }
+      const anchor = getAnimationAnchor(img, rvMochiAnim, 0, 'mini:' + rvMochiAnim);
+      drawAnchoredFrame(
+        rvCtx,
+        img,
+        frame * S,
+        0,
+        anchor,
+        CAT_RENDER_SCALE * RV_SCALE,
+        (rvMochiX + CAT_WORLD_ANCHOR.x * CAT_RENDER_SCALE) * RV_SCALE,
+        (rvMochiY + CAT_WORLD_ANCHOR.y * CAT_RENDER_SCALE - jumpOffset) * RV_SCALE,
+        rvMochiFlip
+      );
+    }
+
+    function rvDrawPixelLine(x0, y0, x1, y1, color, width = 1) {
+      x0 = Math.round(x0);
+      y0 = Math.round(y0);
+      x1 = Math.round(x1);
+      y1 = Math.round(y1);
+      const size = Math.max(1, Math.round(width));
+      const offset = Math.floor(size / 2);
+      const dx = Math.abs(x1 - x0);
+      const dy = Math.abs(y1 - y0);
+      const sx = x0 < x1 ? 1 : -1;
+      const sy = y0 < y1 ? 1 : -1;
+      let err = dx - dy;
+      rvCtx.fillStyle = color;
+
+      while (true) {
+        rvCtx.fillRect(x0 - offset, y0 - offset, size, size);
+        if (x0 === x1 && y0 === y1) break;
+        const e2 = err * 2;
+        if (e2 > -dy) {
+          err -= dy;
+          x0 += sx;
+        }
+        if (e2 < dx) {
+          err += dx;
+          y0 += sy;
+        }
+      }
+    }
+
+    function rvStrokePixelPoly(points, color, width = 1) {
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i];
+        const b = points[(i + 1) % points.length];
+        rvDrawPixelLine(a.x, a.y, b.x, b.y, color, width);
+      }
+    }
+
+    function rvFillPoly(points, fill, stroke = null) {
+      const minY = Math.floor(Math.min(...points.map(point => point.y)));
+      const maxY = Math.ceil(Math.max(...points.map(point => point.y)));
+      rvCtx.fillStyle = fill;
+
+      for (let y = minY; y <= maxY; y++) {
+        const scanY = y + 0.5;
+        const xs = [];
+        for (let i = 0; i < points.length; i++) {
+          const a = points[i];
+          const b = points[(i + 1) % points.length];
+          if ((a.y <= scanY && b.y > scanY) || (b.y <= scanY && a.y > scanY)) {
+            xs.push(a.x + ((scanY - a.y) * (b.x - a.x)) / (b.y - a.y));
+          }
+        }
+        xs.sort((a, b) => a - b);
+        for (let i = 0; i < xs.length; i += 2) {
+          const x1 = Math.ceil(xs[i]);
+          const x2 = Math.floor(xs[i + 1]);
+          if (x2 >= x1) rvCtx.fillRect(x1, y, x2 - x1 + 1, 1);
+        }
+      }
+
+      if (stroke) rvStrokePixelPoly(points, stroke, 1);
+    }
+
+    function rvPixelTextUnits(text) {
+      const letters = text.toUpperCase().split('');
+      if (!letters.length) return 0;
+      return letters.reduce((width, letter, index) => {
+        const pattern = RV_PIXEL_FONT[letter];
+        return width + (pattern ? pattern[0].length : 2) + (index < letters.length - 1 ? 1 : 0);
+      }, 0);
+    }
+
+    function rvGetPixelTextCanvas(text, color) {
+      const key = `${text}:${color}`;
+      if (rvPixelTextCanvasCache.has(key)) return rvPixelTextCanvasCache.get(key);
+
+      const scale = 1;
+      const units = rvPixelTextUnits(text);
+      const textCanvas = document.createElement('canvas');
+      textCanvas.width = Math.max(1, units * scale);
+      textCanvas.height = 5 * scale;
+      const textCtx = textCanvas.getContext('2d');
+      textCtx.imageSmoothingEnabled = false;
+      textCtx.fillStyle = color;
+
+      let cursor = 0;
+      for (const letter of text.toUpperCase()) {
+        const pattern = RV_PIXEL_FONT[letter];
+        if (!pattern) {
+          cursor += 3;
+          continue;
+        }
+        for (let row = 0; row < pattern.length; row++) {
+          for (let col = 0; col < pattern[row].length; col++) {
+            if (pattern[row][col] === '1') {
+              textCtx.fillRect((cursor + col) * scale, row * scale, scale, scale);
+            }
+          }
+        }
+        cursor += pattern[0].length + 1;
+      }
+
+      rvPixelTextCanvasCache.set(key, textCanvas);
+      return textCanvas;
+    }
+
+    function rvPlanePointRaw(plane, u, v) {
+      return {
+        x: plane.x + plane.ux * u + plane.vx * v,
+        y: plane.y + plane.uy * u + plane.vy * v,
+      };
+    }
+
+    function rvDrawPlanePixelText(text, plane, rect, color, cell = null) {
+      const textCanvas = rvGetPixelTextCanvas(text, color);
+      const units = rvPixelTextUnits(text);
+      const uSize = cell?.u ? units * cell.u : rect.u1 - rect.u0;
+      const vSize = cell?.v ? 5 * cell.v : rect.v1 - rect.v0;
+      const u0 = rect.u0 + ((rect.u1 - rect.u0) - uSize) / 2;
+      const v0 = rect.v0 + ((rect.v1 - rect.v0) - vSize) / 2;
+      const origin = rvPlanePointRaw(plane, u0, v0);
+      const uEnd = rvPlanePointRaw(plane, u0 + uSize, v0);
+      const vEnd = rvPlanePointRaw(plane, u0, v0 + vSize);
+      rvCtx.save();
+      rvCtx.imageSmoothingEnabled = false;
+      rvCtx.setTransform(
+        (uEnd.x - origin.x) / textCanvas.width,
+        (uEnd.y - origin.y) / textCanvas.width,
+        (vEnd.x - origin.x) / textCanvas.height,
+        (vEnd.y - origin.y) / textCanvas.height,
+        origin.x,
+        origin.y
+      );
+      rvCtx.drawImage(textCanvas, 0, 0);
+      rvCtx.restore();
+    }
+
+    function rvPlanePoint(plane, u, v) {
+      return {
+        x: Math.round(plane.x + plane.ux * u + plane.vx * v),
+        y: Math.round(plane.y + plane.uy * u + plane.vy * v),
+      };
+    }
+
+    function rvPlanePoly(plane, u0, v0, u1, v1) {
+      return [
+        rvPlanePoint(plane, u0, v0),
+        rvPlanePoint(plane, u1, v0),
+        rvPlanePoint(plane, u1, v1),
+        rvPlanePoint(plane, u0, v1),
+      ];
+    }
+
+    function rvRightWallTopYAt(x) {
+      return 14 + (x - 128) * (68 / 124);
+    }
+
+    function rvControlButtonPoly(button) {
+      return rvPlanePoly(RV_ROOM_CONTROL_ART.facePlane, button.u0, button.v0, button.u1, button.v1);
+    }
+
+    function rvDrawControlButton(button, label, active = false) {
+      const fill = active ? '#a7d6a0' : '#fff2cf';
+      const ink = active ? '#213c29' : '#4b3528';
+      const outer = rvControlButtonPoly(button);
+      const inner = rvPlanePoly(
+        RV_ROOM_CONTROL_ART.facePlane,
+        button.u0 + 0.025,
+        button.v0 + 0.06,
+        button.u1 - 0.025,
+        button.v1 - 0.06
+      );
+      rvFillPoly(outer, '#4b3528');
+      rvFillPoly(inner, fill);
+      rvDrawPlanePixelText(
+        label,
+        RV_ROOM_CONTROL_ART.facePlane,
+        {
+          u0: button.u0 + 0.035,
+          u1: button.u1 - 0.035,
+          v0: button.v0 + 0.02,
+          v1: button.v1 - 0.02,
+        },
+        ink,
+        RV_ROOM_CONTROL_ART.labelCell
+      );
+    }
+
+    function rvDrawRoomControls() {
+      const art = RV_ROOM_CONTROL_ART;
+      rvCtx.save();
+      for (const postU of art.postUs) {
+        const top = rvPlanePoint(art.framePlane, postU, 1);
+        const bottom = { x: top.x, y: Math.round(rvRightWallTopYAt(top.x) + 2) };
+        rvDrawPixelLine(top.x, top.y, bottom.x, bottom.y, '#2d2524', 4);
+        rvDrawPixelLine(top.x + 1, top.y + 1, bottom.x + 1, bottom.y + 1, '#8f6d4d', 2);
+        rvDrawPixelLine(top.x, top.y + 1, bottom.x, bottom.y + 1, '#caa77a', 1);
+      }
+      const frame = rvPlanePoly(art.framePlane, 0, 0, 1, 1);
+      const face = rvPlanePoly(art.facePlane, 0, 0, 1, 1);
+      const lipStart = rvPlanePoint(art.framePlane, 0, 1);
+      const lipEnd = rvPlanePoint(art.framePlane, 1, 1);
+      const lipBackStart = {
+        x: lipStart.x + art.lipDepth.x,
+        y: lipStart.y + art.lipDepth.y,
+      };
+      const lipBackEnd = {
+        x: lipEnd.x + art.lipDepth.x,
+        y: lipEnd.y + art.lipDepth.y,
+      };
+      rvFillPoly([
+        lipStart,
+        lipEnd,
+        lipBackEnd,
+        lipBackStart,
+      ], '#5c4634', '#2d2524');
+      rvFillPoly(frame, '#8f6d4d', '#2d2524');
+      rvFillPoly(face, '#f7e5bd', '#5c4634');
+
+      const frameHighlightA = rvPlanePoint(art.framePlane, 0.06, 0.05);
+      const frameHighlightB = rvPlanePoint(art.framePlane, 0.92, 0.05);
+      const faceHighlightA = rvPlanePoint(art.facePlane, 0.07, 0.12);
+      const faceHighlightB = rvPlanePoint(art.facePlane, 0.86, 0.12);
+      rvDrawPixelLine(frameHighlightA.x, frameHighlightA.y, frameHighlightB.x, frameHighlightB.y, '#caa77a', 2);
+      rvDrawPixelLine(faceHighlightA.x, faceHighlightA.y, faceHighlightB.x, faceHighlightB.y, '#fdf4d7', 1);
+
+      rvDrawControlButton(art.playButton, roomViewPlaying ? 'PAUSE' : 'PLAY', roomViewPlaying);
+      rvDrawControlButton(art.editButton, 'EDIT', false);
+      rvCtx.restore();
+    }
+
+    function rvCurrentJumpOffset() {
+      if (rvMochiMoveMode !== 'hop') return 0;
+      return Math.sin(rvMochiJumpProgress() * Math.PI) * rvMochiHopHeight();
+    }
+
+    function rvCanvasWorldCoordsFromPixel(point) {
+      if (!point) return { x: 0, y: 0, inside: false };
+      const x = (point.x / RV_SIZE) * RV_WORLD;
+      const y = (point.y / RV_SIZE) * RV_WORLD;
+      const insideCanvas = x >= 0 && x <= RV_WORLD && y >= 0 && y <= RV_WORLD;
+      return { x, y, inside: insideCanvas && rvPointInPolygon({ x, y }, RV_ROOM_ZONES.roomShell) };
+    }
+
+    function rvCanvasPixelCoords(e) {
+      const rect = roomViewCanvas.getBoundingClientRect();
+      return {
+        x: ((e.clientX - rect.left) / rect.width) * RV_SIZE,
+        y: ((e.clientY - rect.top) / rect.height) * RV_SIZE,
+      };
+    }
+
+    function rvPointIsInsideCanvas(point) {
+      return !!point && point.x >= 0 && point.x <= RV_SIZE && point.y >= 0 && point.y <= RV_SIZE;
+    }
+
+    function rvControlAtPoint(point) {
+      if (!point) return null;
+      if (rvPointInPolygon(point, rvControlButtonPoly(RV_ROOM_CONTROL_ART.playButton))) return 'play';
+      if (rvPointInPolygon(point, rvControlButtonPoly(RV_ROOM_CONTROL_ART.editButton))) return 'edit';
+      return null;
+    }
+
+    function rvRefreshPointerState({ point = rvPointerCanvasPoint, follow = false } = {}) {
+      rvPointerCanvasPoint = point;
+      const control = rvControlAtPoint(point);
+      rvPointerOverControl = !!control && !rvDragging;
+      if (rvPointerOverControl || !roomViewPlaying || rvDragging) {
+        rvToyInside = false;
+        if (!rvPointerOverControl) rvLastToyTarget = null;
+        return control;
+      }
+
+      const pos = rvCanvasWorldCoordsFromPixel(point);
+      rvToyInside = pos.inside;
+      if (!pos.inside) {
+        rvLastToyTarget = null;
+        return null;
+      }
+
+      rvToyX = pos.x;
+      rvToyY = pos.y;
+      if (follow) rvRequestToyFollow();
+      return null;
+    }
+
+    function rvClearPointerState() {
+      rvPointerCanvasPoint = null;
+      rvPointerOverControl = false;
+      rvToyInside = false;
+      rvLastToyTarget = null;
+    }
+
+    function rvTrackPointerEvent(e, follow = true) {
+      if (!showingRoom) return;
+      const point = rvCanvasPixelCoords(e);
+      if (!rvPointIsInsideCanvas(point)) {
+        rvClearPointerState();
+        rvSetRoomCursor();
+        return;
+      }
+      rvRefreshPointerState({ point, follow });
+      rvSetRoomCursor();
+    }
+
+    function renderRoomView(t = performance.now()) {
+      if (!showingRoom) return;
+      rvUpdateMochi(t);
+      rvCtx.clearRect(0, 0, RV_SIZE, RV_SIZE);
+      // Scale 512 → 256 for crisp half-size pixel art.
+      if (roomBgImg) rvCtx.drawImage(roomBgImg, 0, 0, RV_WORLD, RV_WORLD, 0, 0, RV_SIZE, RV_SIZE);
+
+      const mochiFootprint = rvMochiFootprintAt(rvMochiX, rvMochiY);
+      const mochiSortY = mochiFootprint.rect.y + mochiFootprint.rect.h;
+      let drewMochi = false;
+
+      for (const entry of roomViewEntries) {
+        if (!drewMochi && mochiSortY <= entry.sortY) {
+          rvDrawMochi();
+          drewMochi = true;
+        }
+        if (!entry.img) continue;
+        rvCtx.drawImage(
+          entry.img,
+          entry.sx, entry.sy, entry.sw, entry.sh,
+          Math.round(entry.item.x * RV_SCALE),
+          Math.round(entry.item.y * RV_SCALE),
+          Math.round(entry.sw * RV_SCALE),
+          Math.round(entry.sh * RV_SCALE)
+        );
+      }
+      if (!drewMochi) rvDrawMochi();
+      rvDrawRoomControls();
+      rvDrawToyCursor();
     }
 
     // Mini catalog for room view rendering
@@ -879,7 +2389,10 @@
       if (!roomSrcSet.has(item.src)) {
         roomSrcSet.add(item.src);
         const img = new Image();
-        img.onload = () => { roomItemImgs[item.src] = img; };
+        img.onload = () => {
+          roomItemImgs[item.src] = img;
+          if (showingRoom) rvRebuildRoomViewCache();
+        };
         img.src = item.src;
       }
     }
@@ -896,7 +2409,10 @@
       if (!roomSrcSet.has(src)) {
         roomSrcSet.add(src);
         const img = new Image();
-        img.onload = () => { roomItemImgs[src] = img; };
+        img.onload = () => {
+          roomItemImgs[src] = img;
+          if (showingRoom) rvRebuildRoomViewCache();
+        };
         img.src = src;
       }
     }
@@ -904,10 +2420,45 @@
     function toggleRoomView() {
       showingRoom = !showingRoom;
       localStorage.setItem('showRoom', showingRoom);
-      roomViewCanvas.classList.toggle('show', showingRoom);
+      roomViewWrap.classList.toggle('show', showingRoom);
       canvas.style.display = showingRoom ? 'none' : 'block';
       document.getElementById('viewroom-btn').textContent = showingRoom ? 'Hide Room' : 'View Room';
       if (showingRoom) loadRoomView();
+      else rvSetPlaying(false);
+      positionBubble();
+    }
+
+    function getBubbleAnchor() {
+      if (showingRoom) {
+        return {
+          x: roomViewWrap.offsetLeft + (rvMochiX + RV_MOCHI_FOOT_CENTER.x) * RV_SCALE,
+          y: roomViewWrap.offsetTop + (rvMochiY + 15 - rvCurrentJumpOffset()) * RV_SCALE,
+        };
+      }
+
+      return {
+        x: canvas.offsetLeft + CAT_STAGE_ANCHOR.x,
+        y: canvas.offsetTop + 14,
+      };
+    }
+
+    function positionBubble() {
+      const bubble = document.getElementById('bubble');
+      if (!bubble.classList.contains('show')) return;
+
+      const anchor = getBubbleAnchor();
+      const margin = 4;
+      const bodyW = document.body.clientWidth || window.innerWidth;
+      const bubbleW = bubble.offsetWidth;
+      const bubbleH = bubble.offsetHeight;
+      const desiredLeft = anchor.x - bubbleW / 2;
+      const left = Math.max(margin, Math.min(bodyW - bubbleW - margin, desiredLeft));
+      const top = Math.max(margin, anchor.y - bubbleH - 9);
+      const tailLeft = Math.max(10, Math.min(bubbleW - 10, anchor.x - left));
+
+      bubble.style.left = Math.round(left) + 'px';
+      bubble.style.top = Math.round(top) + 'px';
+      bubble.style.setProperty('--bubble-tail-left', Math.round(tailLeft) + 'px');
     }
 
     function showBubble() {
@@ -917,6 +2468,7 @@
       const b = document.getElementById('bubble');
       b.textContent = m[Math.floor(Math.random() * m.length)];
       b.classList.add('show');
+      positionBubble();
       clearTimeout(bubbleTimer);
       bubbleTimer = setTimeout(() => b.classList.remove('show'), 4000);
     }
@@ -936,7 +2488,7 @@
         clickTimer = setTimeout(() => {
           clickTimer = null;
           // Single click — random animation
-          if (state === 'sleeping') return;
+          if (state === 'sleeping' || followingMouse) return;
           const randomAnims = ['dead', 'excited', 'waiting', 'surprised', 'idle2', 'dance', 'lick', 'shy', 'refuse', 'despite'];
           const pick = randomAnims[Math.floor(Math.random() * randomAnims.length)];
           clearTimeout(idleTimer);
@@ -1195,7 +2747,6 @@
           }
         };
       });
-
       // Close buttons
       document.querySelectorAll('.panel-close').forEach(btn => {
         btn.onclick = () => closePanel();
@@ -1233,7 +2784,7 @@
           document.getElementById('menu').classList.remove('open');
           if (activePanel) { document.getElementById(activePanel).classList.remove('open'); activePanel = null; }
           document.getElementById('bubble').classList.remove('show');
-          ctx.clearRect(0, 0, S, S);
+          ctx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
         }
       });
 
@@ -1246,43 +2797,95 @@
 
       // Restore room view state
       if (showingRoom) {
-        roomViewCanvas.classList.add('show');
+        roomViewWrap.classList.add('show');
         canvas.style.display = 'none';
         document.getElementById('viewroom-btn').textContent = 'Hide Room';
         loadRoomView();
       }
 
-      // Room view: drag to reposition; single click = menu (after delay), double click = editor (same timing as cat)
-      let rvDragging = false, rvStartX, rvStartY, rvOrigLeft, rvOrigTop, rvMoved;
+      function rvActivateControl(control) {
+        if (control === 'play') {
+          menuOpen = false;
+          document.getElementById('menu').classList.remove('open');
+          rvSetPlaying(!roomViewPlaying);
+        } else if (control === 'edit') {
+          rvSetPlaying(false);
+          menuOpen = false;
+          document.getElementById('menu').classList.remove('open');
+          window.electronAPI?.openRoom();
+        }
+      }
+
+      // Room view: drag when paused; double-click opens the menu, never the editor.
       let roomViewClickTimer = null;
       roomViewCanvas.addEventListener('mousedown', (e) => {
+        const point = rvCanvasPixelCoords(e);
+        rvPointerCanvasPoint = point;
+        const control = rvRefreshPointerState({ point, follow: false });
+        if (control) {
+          rvControlPressed = control;
+          rvLastToyTarget = null;
+          rvSetRoomCursor();
+          e.preventDefault();
+          return;
+        }
+        rvControlPressed = null;
         rvDragging = true; rvMoved = false;
+        rvToyInside = false;
+        rvLastToyTarget = null;
         rvStartX = e.clientX; rvStartY = e.clientY;
-        rvOrigLeft = roomViewCanvas.offsetLeft; rvOrigTop = roomViewCanvas.offsetTop;
+        rvOrigLeft = roomViewWrap.offsetLeft; rvOrigTop = roomViewWrap.offsetTop;
+        rvSetRoomCursor();
         e.preventDefault();
       });
       document.addEventListener('mousemove', (e) => {
-        if (!rvDragging) return;
+        if (!rvDragging) {
+          rvTrackPointerEvent(e, true);
+          return;
+        }
         const dx = e.clientX - rvStartX, dy = e.clientY - rvStartY;
         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) rvMoved = true;
-        roomViewCanvas.style.left = (rvOrigLeft + dx) + 'px';
-        roomViewCanvas.style.top = (rvOrigTop + dy) + 'px';
-        roomViewCanvas.style.right = 'auto';
-        roomViewCanvas.style.bottom = 'auto';
+        roomViewWrap.style.left = (rvOrigLeft + dx) + 'px';
+        roomViewWrap.style.top = (rvOrigTop + dy) + 'px';
+        roomViewWrap.style.right = 'auto';
+        roomViewWrap.style.bottom = 'auto';
       });
-      document.addEventListener('mouseup', () => { rvDragging = false; });
-      roomViewCanvas.addEventListener('click', () => {
+      document.addEventListener('mouseup', (e) => {
+        rvDragging = false;
+        rvTrackPointerEvent(e, false);
+        rvSetRoomCursor();
+      });
+      roomViewCanvas.addEventListener('click', (e) => {
+        const point = rvCanvasPixelCoords(e);
+        const control = rvRefreshPointerState({ point, follow: false });
+        if (rvControlPressed && control === rvControlPressed) {
+          rvActivateControl(control);
+          rvControlPressed = null;
+          return;
+        }
+        rvControlPressed = null;
         if (rvMoved) { rvMoved = false; return; }
         if (roomViewClickTimer) {
           clearTimeout(roomViewClickTimer);
           roomViewClickTimer = null;
-          window.electronAPI?.openRoom();
+          toggleMenu();
         } else {
           roomViewClickTimer = setTimeout(() => {
             roomViewClickTimer = null;
-            toggleMenu();
           }, 250);
         }
+      });
+
+      roomViewCanvas.addEventListener('mousemove', (e) => {
+        rvTrackPointerEvent(e, true);
+      });
+      roomViewCanvas.addEventListener('mouseenter', (e) => {
+        rvTrackPointerEvent(e, true);
+      });
+      roomViewCanvas.addEventListener('mouseleave', () => {
+        rvControlPressed = null;
+        rvClearPointerState();
+        rvSetRoomCursor();
       });
 
       // Periodic room view refresh (picks up changes from editor)

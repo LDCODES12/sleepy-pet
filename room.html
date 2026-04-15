@@ -132,7 +132,8 @@
     }
     .mode-btn:hover { background: rgba(255,255,255,0.1); }
     .mode-btn.active { background: rgba(108,92,231,0.4); border-color: rgba(108,92,231,0.5); }
-    .hint { font-size: 10px; color: rgba(255,255,255,0.3); }
+    .hint { font-size: 10px; color: rgba(255,255,255,0.3); transition: color 0.15s; }
+    .hint.warn { color: #ffb4a9; }
 
     /* ── Drag ghost ── */
     .drag-ghost {
@@ -159,7 +160,7 @@
       <button class="mode-btn active" data-mode="edit">Edit</button>
       <button class="mode-btn" data-mode="play">Play</button>
     </div>
-    <span class="hint" id="hint">Drag items from palette · Right-click placed items to remove</span>
+    <span class="hint" id="hint">Drag items from palette · Wall items stay on walls · Floor items stay on floor</span>
   </div>
 
 <script>
@@ -170,6 +171,46 @@ const ITEMS = 'assets/cat-pack-paid/CatPackPaid/CatItems/';
 const DECOS = 'assets/cat-pack-paid/CatPackPaid/CatItems/Decorations/Individual/';
 const SPRITES = 'assets/cat-pack-paid/CatPackPaid/Sprites/Classical/Individual/';
 const S = 32;
+const MOCHI_DRAW_SIZE = 64;
+const MOCHI_SPEED = 2;
+const MOCHI_PATH_GRID = 16;
+const MOCHI_PATH_MAX_NODES = 4200;
+const MOCHI_FOOT_CENTER = { x: 30, y: 55 };
+const MOCHI_FRAME_PADDING = 1;
+const MOCHI_TOY_ID = 'toy-cat';
+const MOCHI_TOY_CURSOR_SCALE = 2;
+const MOCHI_TOY_FOLLOW_MS = 180;
+const MOCHI_TOY_DEADZONE = 24;
+const MOCHI_TOY_POM_POINTS = [
+  { x: 5.5, y: 14.5 },
+  { x: 6.5, y: 15.5 },
+  { x: 7.5, y: 15.5 },
+  { x: 5.5, y: 17.5 },
+  { x: 5.5, y: 16.5 },
+  { x: 5.5, y: 16.5 },
+];
+const MOCHI_HOP_SPEED = 4.8;
+const MOCHI_HOP_MIN_HEIGHT = 18;
+const MOCHI_HOP_MAX_HEIGHT = 48;
+const MOCHI_HOP_MIN_DISTANCE = 64;
+const MOCHI_HOP_DETOUR_RATIO = 1.45;
+const MOCHI_MAX_HOP_DISTANCE = 280;
+const MOCHI_TARGET_CLEARANCE = 12;
+const MOCHI_STUCK_MS = 1100;
+const MOCHI_PROGRESS_EPSILON = 1.25;
+const MOCHI_BASE_FOOTPRINT_ROWS = [
+  { y: 49, minX: 22, maxX: 38 },
+  { y: 50, minX: 18, maxX: 42 },
+  { y: 51, minX: 16, maxX: 44 },
+  { y: 52, minX: 15, maxX: 45 },
+  { y: 53, minX: 14, maxX: 46 },
+  { y: 54, minX: 14, maxX: 46 },
+  { y: 55, minX: 14, maxX: 46 },
+  { y: 56, minX: 15, maxX: 45 },
+  { y: 57, minX: 16, maxX: 44 },
+  { y: 58, minX: 18, maxX: 42 },
+  { y: 59, minX: 21, maxX: 39 },
+];
 
 let currentRoom = parseInt(localStorage.getItem('currentRoom') || '1');
 let mode = 'edit';
@@ -206,14 +247,14 @@ const CATALOG = [
   { id: 'catfood', name: 'Cat Food', cat: 'Food', src: ITEMS+'CatToys/catfood.png', w:32, h:32, interact:'eat' },
 
   // ── Toys (scratch posts from toyss.png 128x128, 2x2 = 4 at 64x64) ──
-  { id: 'scratch-1', name: 'Scratch Post 1', cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:0,  cropY:0,  cropW:64, cropH:64, interact:'play' },
-  { id: 'scratch-2', name: 'Scratch Post 2', cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:64, cropY:0,  cropW:64, cropH:64, interact:'play' },
-  { id: 'scratch-3', name: 'Scratch Post 3', cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:0,  cropY:64, cropW:64, cropH:64, interact:'play' },
-  { id: 'scratch-4', name: 'Scratch Post 4', cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:64, cropY:64, cropW:64, cropH:64, interact:'play' },
+  { id: 'scratch-1', name: 'Green Scratch Post', cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:0,  cropY:0,  cropW:64, cropH:64, interact:'play' },
+  { id: 'scratch-2', name: 'Blue Scratch Post',  cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:64, cropY:0,  cropW:64, cropH:64, interact:'play' },
+  { id: 'scratch-3', name: 'Purple Scratch Post',cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:0,  cropY:64, cropW:64, cropH:64, interact:'play' },
+  { id: 'scratch-4', name: 'Red Scratch Post',   cat: 'Toys', src: ITEMS+'CatToys/toyss.png', w:128, h:128, cropX:64, cropY:64, cropW:64, cropH:64, interact:'play' },
 
   // ── Toy animations (first frame only) ──
   { id: 'toy-cat',   name: 'Cat Toy',   cat: 'Toys', src: ITEMS+'CatToys/CatToy.png',        w:192, h:32,  cropX:0, cropY:0, cropW:32, cropH:32, interact:'play' },
-  { id: 'toy-mouse', name: 'Mouse',     cat: 'Toys', src: ITEMS+'CatToys/Mouse-Sheet.png',    w:158, h:32,  cropX:0, cropY:0, cropW:32, cropH:32, interact:'play' },
+  { id: 'toy-mouse', name: 'Mouse Toy', cat: 'Toys', src: ITEMS+'CatToys/Mouse-Sheet.png',    w:158, h:32,  cropX:0, cropY:0, cropW:32, cropH:32, interact:'play' },
   { id: 'ball-blue', name: 'Blue Ball', cat: 'Toys', src: ITEMS+'CatToys/BlueBall-Sheet.png',  w:120, h:16,  cropX:0, cropY:0, cropW:16, cropH:16, interact:'play' },
   { id: 'ball-orange',name:'Orange Ball',cat: 'Toys', src: ITEMS+'CatToys/OrangeBall-Sheet.png',w:120, h:16,  cropX:0, cropY:0, cropW:16, cropH:16, interact:'play' },
   { id: 'ball-pink', name: 'Pink Ball', cat: 'Toys', src: ITEMS+'CatToys/PinkBall-Sheet.png',  w:120, h:16,  cropX:0, cropY:0, cropW:16, cropH:16, interact:'play' },
@@ -224,133 +265,1308 @@ const CATALOG = [
 
   // ── Decorations ──
   // Wall Art
-  { id:'deco_000', name:'Blue Painting',   cat:'Wall Art', src:DECOS+'deco_000.png', w:61, h:95 },
+  { id:'deco_000', name:'White Painting',  cat:'Wall Art', src:DECOS+'deco_000.png', w:61, h:95 },
   { id:'deco_001', name:'Brown Painting',  cat:'Wall Art', src:DECOS+'deco_001.png', w:61, h:95 },
-  { id:'deco_018', name:'Green Painting',  cat:'Wall Art', src:DECOS+'deco_018.png', w:61, h:95 },
-  { id:'deco_019', name:'Teal Painting',   cat:'Wall Art', src:DECOS+'deco_019.png', w:61, h:95 },
-  { id:'deco_065', name:'Wall Frame A',    cat:'Wall Art', src:DECOS+'deco_065.png', w:17, h:32 },
-  { id:'deco_066', name:'Wall Frame B',    cat:'Wall Art', src:DECOS+'deco_066.png', w:17, h:32 },
-  { id:'deco_067', name:'Wall Frame C',    cat:'Wall Art', src:DECOS+'deco_067.png', w:17, h:32 },
-  { id:'deco_068', name:'Wall Frame D',    cat:'Wall Art', src:DECOS+'deco_068.png', w:17, h:32 },
-  { id:'deco_069', name:'Wall Frame E',    cat:'Wall Art', src:DECOS+'deco_069.png', w:17, h:32 },
-  { id:'deco_070', name:'Wall Frame F',    cat:'Wall Art', src:DECOS+'deco_070.png', w:17, h:32 },
-  { id:'deco_074', name:'Photo Frame A',   cat:'Wall Art', src:DECOS+'deco_074.png', w:43, h:37 },
-  { id:'deco_075', name:'Photo Frame B',   cat:'Wall Art', src:DECOS+'deco_075.png', w:43, h:37 },
-  { id:'deco_076', name:'Photo Frame C',   cat:'Wall Art', src:DECOS+'deco_076.png', w:43, h:37 },
-  { id:'deco_077', name:'Wall Frame G',    cat:'Wall Art', src:DECOS+'deco_077.png', w:17, h:32 },
-  { id:'deco_078', name:'Photo Frame D',   cat:'Wall Art', src:DECOS+'deco_078.png', w:43, h:37 },
-  { id:'deco_079', name:'Wall Frame H',    cat:'Wall Art', src:DECOS+'deco_079.png', w:17, h:32 },
-  { id:'deco_080', name:'Wall Frame I',    cat:'Wall Art', src:DECOS+'deco_080.png', w:17, h:32 },
+  { id:'deco_018', name:'Gray Painting',   cat:'Wall Art', src:DECOS+'deco_018.png', w:61, h:95 },
+  { id:'deco_019', name:'Tan Painting',    cat:'Wall Art', src:DECOS+'deco_019.png', w:61, h:95 },
+  { id:'deco_065', name:'Gold Heart Frame',cat:'Wall Art', src:DECOS+'deco_065.png', w:17, h:32 },
+  { id:'deco_066', name:'Rose Heart Frame',cat:'Wall Art', src:DECOS+'deco_066.png', w:17, h:32 },
+  { id:'deco_067', name:'Gray Heart Frame',cat:'Wall Art', src:DECOS+'deco_067.png', w:17, h:32 },
+  { id:'deco_068', name:'White Heart Frame',cat:'Wall Art', src:DECOS+'deco_068.png', w:17, h:32 },
+  { id:'deco_069', name:'Blue Heart Frame',cat:'Wall Art', src:DECOS+'deco_069.png', w:17, h:32 },
+  { id:'deco_070', name:'Purple Heart Frame',cat:'Wall Art', src:DECOS+'deco_070.png', w:17, h:32 },
+  { id:'deco_077', name:'Pink Heart Frame',cat:'Wall Art', src:DECOS+'deco_077.png', w:17, h:32 },
+  { id:'deco_079', name:'Cream Heart Frame',cat:'Wall Art', src:DECOS+'deco_079.png', w:17, h:32 },
+  { id:'deco_080', name:'Green Heart Frame',cat:'Wall Art', src:DECOS+'deco_080.png', w:17, h:32 },
+  { id:'deco_041', name:'Pink Plant Print',cat:'Wall Art', src:DECOS+'deco_041.png', w:38, h:62 },
+  { id:'deco_048', name:'Green Cat Print', cat:'Wall Art', src:DECOS+'deco_048.png', w:25, h:46 },
+  { id:'deco_049', name:'Blue Cat Print',  cat:'Wall Art', src:DECOS+'deco_049.png', w:25, h:46 },
+  { id:'deco_050', name:'Brown Cat Print', cat:'Wall Art', src:DECOS+'deco_050.png', w:25, h:46 },
+  { id:'deco_057', name:'Teal Cat Print',  cat:'Wall Art', src:DECOS+'deco_057.png', w:25, h:46 },
+  { id:'deco_058', name:'Black Cat Print', cat:'Wall Art', src:DECOS+'deco_058.png', w:25, h:46 },
+  { id:'deco_059', name:'Purple Cat Print',cat:'Wall Art', src:DECOS+'deco_059.png', w:25, h:46 },
+  { id:'deco_052', name:'Hanging Plant',   cat:'Wall Art', src:DECOS+'deco_052.png', w:39, h:89 },
   // Windows
   { id:'deco_016', name:'Blue Window',     cat:'Windows', src:DECOS+'deco_016.png', w:64, h:123 },
   { id:'deco_017', name:'Bamboo Window',   cat:'Windows', src:DECOS+'deco_017.png', w:64, h:123 },
   { id:'deco_038', name:'Teal Window',     cat:'Windows', src:DECOS+'deco_038.png', w:64, h:123 },
   { id:'deco_039', name:'Pink Window',     cat:'Windows', src:DECOS+'deco_039.png', w:64, h:123 },
-  { id:'deco_028', name:'Blue Curtain',    cat:'Windows', src:DECOS+'deco_028.png', w:110, h:82 },
-  { id:'deco_029', name:'Green Curtain',   cat:'Windows', src:DECOS+'deco_029.png', w:110, h:82 },
-  { id:'deco_046', name:'Pink Curtain',    cat:'Windows', src:DECOS+'deco_046.png', w:110, h:82 },
-  { id:'deco_047', name:'Brown Curtain',   cat:'Windows', src:DECOS+'deco_047.png', w:110, h:82 },
-  { id:'deco_063', name:'Tan Curtain',     cat:'Windows', src:DECOS+'deco_063.png', w:110, h:82 },
-  { id:'deco_064', name:'Grey Curtain',    cat:'Windows', src:DECOS+'deco_064.png', w:110, h:82 },
-  { id:'deco_060', name:'Wide Window A',   cat:'Windows', src:DECOS+'deco_060.png', w:93, h:139 },
-  { id:'deco_061', name:'Wide Window B',   cat:'Windows', src:DECOS+'deco_061.png', w:93, h:139 },
-  { id:'deco_062', name:'Wide Window C',   cat:'Windows', src:DECOS+'deco_062.png', w:93, h:139 },
-  // Shelves
-  { id:'deco_053', name:'Wood Shelf A',    cat:'Shelves', src:DECOS+'deco_053.png', w:100, h:128 },
-  { id:'deco_071', name:'Wood Shelf B',    cat:'Shelves', src:DECOS+'deco_071.png', w:100, h:129 },
-  { id:'deco_091', name:'Blue Shelf',      cat:'Shelves', src:DECOS+'deco_091.png', w:100, h:128 },
-  { id:'deco_117', name:'Green Shelf',     cat:'Shelves', src:DECOS+'deco_117.png', w:100, h:127 },
-  { id:'deco_146', name:'Purple Shelf',    cat:'Shelves', src:DECOS+'deco_146.png', w:100, h:127 },
+  { id:'deco_060', name:'Pink Wide Window',cat:'Windows', src:DECOS+'deco_060.png', w:93, h:139 },
+  { id:'deco_061', name:'Rose Wide Window',cat:'Windows', src:DECOS+'deco_061.png', w:93, h:139 },
+  { id:'deco_062', name:'Blue Wide Window',cat:'Windows', src:DECOS+'deco_062.png', w:93, h:139 },
+  // Bookcases
+  { id:'deco_053', name:'Peach Bookcase',  cat:'Bookcases', src:DECOS+'deco_053.png', w:100, h:128 },
+  { id:'deco_071', name:'Blue Bookcase',   cat:'Bookcases', src:DECOS+'deco_071.png', w:100, h:129 },
+  { id:'deco_091', name:'Green Bookcase',  cat:'Bookcases', src:DECOS+'deco_091.png', w:100, h:128 },
+  { id:'deco_117', name:'Purple Bookcase', cat:'Bookcases', src:DECOS+'deco_117.png', w:100, h:127 },
+  { id:'deco_146', name:'Tan Bookcase',    cat:'Bookcases', src:DECOS+'deco_146.png', w:100, h:127 },
   // Deco Cat Towers
   { id:'deco_013', name:'White Tower',     cat:'Deco Towers', src:DECOS+'deco_013.png', w:85, h:175, interact:'play' },
-  { id:'deco_014', name:'Brown Tower',     cat:'Deco Towers', src:DECOS+'deco_014.png', w:85, h:175, interact:'play' },
-  { id:'deco_015', name:'Grey Tower',      cat:'Deco Towers', src:DECOS+'deco_015.png', w:85, h:175, interact:'play' },
-  { id:'deco_051', name:'Tall Tower A',    cat:'Deco Towers', src:DECOS+'deco_051.png', w:111, h:158, interact:'play' },
-  { id:'deco_081', name:'Tall Tower B',    cat:'Deco Towers', src:DECOS+'deco_081.png', w:111, h:158, interact:'play' },
+  { id:'deco_014', name:'Blue Tower',      cat:'Deco Towers', src:DECOS+'deco_014.png', w:85, h:175, interact:'play' },
+  { id:'deco_015', name:'Purple Tower',    cat:'Deco Towers', src:DECOS+'deco_015.png', w:85, h:175, interact:'play' },
+  { id:'deco_051', name:'Peach Stair Tower',cat:'Deco Towers', src:DECOS+'deco_051.png', w:111, h:158, interact:'play' },
+  { id:'deco_081', name:'Brown Stair Tower',cat:'Deco Towers', src:DECOS+'deco_081.png', w:111, h:158, interact:'play' },
   // Deco Beds/Cushions
-  { id:'deco_002', name:'Blue Cushion',    cat:'Deco Beds', src:DECOS+'deco_002.png', w:64, h:110, interact:'sleep' },
-  { id:'deco_003', name:'Grey Cushion',    cat:'Deco Beds', src:DECOS+'deco_003.png', w:64, h:110, interact:'sleep' },
-  { id:'deco_004', name:'Dark Cushion',    cat:'Deco Beds', src:DECOS+'deco_004.png', w:64, h:110, interact:'sleep' },
+  { id:'deco_028', name:'Blue Box Bed',    cat:'Deco Beds', src:DECOS+'deco_028.png', w:110, h:82, interact:'sleep' },
+  { id:'deco_029', name:'Gray Box Bed',    cat:'Deco Beds', src:DECOS+'deco_029.png', w:110, h:82, interact:'sleep' },
+  { id:'deco_046', name:'Pink Box Bed',    cat:'Deco Beds', src:DECOS+'deco_046.png', w:110, h:82, interact:'sleep' },
+  { id:'deco_047', name:'Olive Box Bed',   cat:'Deco Beds', src:DECOS+'deco_047.png', w:110, h:82, interact:'sleep' },
+  { id:'deco_063', name:'Purple Box Bed',  cat:'Deco Beds', src:DECOS+'deco_063.png', w:110, h:82, interact:'sleep' },
+  { id:'deco_064', name:'Teal Box Bed',    cat:'Deco Beds', src:DECOS+'deco_064.png', w:110, h:82, interact:'sleep' },
+  { id:'deco_002', name:'Peach Cat Perch', cat:'Cat Trees', src:DECOS+'deco_002.png', w:64, h:110, interact:'play' },
+  { id:'deco_003', name:'Olive Cat Perch', cat:'Cat Trees', src:DECOS+'deco_003.png', w:64, h:110, interact:'play' },
+  { id:'deco_004', name:'Blue Cat Perch',  cat:'Cat Trees', src:DECOS+'deco_004.png', w:64, h:110, interact:'play' },
   // Plants
-  { id:'deco_040', name:'Small Plant A',   cat:'Plants', src:DECOS+'deco_040.png', w:41, h:63 },
-  { id:'deco_041', name:'Small Plant B',   cat:'Plants', src:DECOS+'deco_041.png', w:38, h:62 },
-  { id:'deco_042', name:'Pot Plant A',     cat:'Plants', src:DECOS+'deco_042.png', w:23, h:29 },
-  { id:'deco_043', name:'Pot Plant B',     cat:'Plants', src:DECOS+'deco_043.png', w:23, h:29 },
-  { id:'deco_044', name:'Pot Plant C',     cat:'Plants', src:DECOS+'deco_044.png', w:23, h:29 },
-  { id:'deco_045', name:'Pot Plant D',     cat:'Plants', src:DECOS+'deco_045.png', w:23, h:29 },
-  { id:'deco_054', name:'Pot Plant E',     cat:'Plants', src:DECOS+'deco_054.png', w:23, h:29 },
-  { id:'deco_056', name:'Pot Plant F',     cat:'Plants', src:DECOS+'deco_056.png', w:23, h:29 },
-  { id:'deco_052', name:'Hanging Plant',   cat:'Plants', src:DECOS+'deco_052.png', w:39, h:89 },
-  { id:'deco_055', name:'Tall Plant A',    cat:'Plants', src:DECOS+'deco_055.png', w:45, h:108 },
-  { id:'deco_072', name:'Tall Plant B',    cat:'Plants', src:DECOS+'deco_072.png', w:45, h:108 },
-  { id:'deco_092', name:'Tall Plant C',    cat:'Plants', src:DECOS+'deco_092.png', w:45, h:108 },
-  { id:'deco_118', name:'Tall Plant D',    cat:'Plants', src:DECOS+'deco_118.png', w:45, h:108 },
-  { id:'deco_073', name:'Floor Plant A',   cat:'Plants', src:DECOS+'deco_073.png', w:55, h:77 },
-  { id:'deco_093', name:'Floor Plant B',   cat:'Plants', src:DECOS+'deco_093.png', w:55, h:77 },
+  { id:'deco_040', name:'White Room Divider',cat:'Furniture', src:DECOS+'deco_040.png', w:41, h:63 },
+  { id:'deco_042', name:'Pink Pot Plant',  cat:'Plants', src:DECOS+'deco_042.png', w:23, h:29 },
+  { id:'deco_043', name:'Cream Pot Plant', cat:'Plants', src:DECOS+'deco_043.png', w:23, h:29 },
+  { id:'deco_044', name:'Gray Pot Plant',  cat:'Plants', src:DECOS+'deco_044.png', w:23, h:29 },
+  { id:'deco_045', name:'Blue Pot Plant',  cat:'Plants', src:DECOS+'deco_045.png', w:23, h:29 },
+  { id:'deco_054', name:'Yellow Pot Plant',cat:'Plants', src:DECOS+'deco_054.png', w:23, h:29 },
+  { id:'deco_056', name:'Purple Pot Plant',cat:'Plants', src:DECOS+'deco_056.png', w:23, h:29 },
+  { id:'deco_055', name:'Brown Tall Plant',cat:'Plants', src:DECOS+'deco_055.png', w:45, h:108 },
+  { id:'deco_072', name:'Blue Tall Plant', cat:'Plants', src:DECOS+'deco_072.png', w:45, h:108 },
+  { id:'deco_092', name:'Purple Tall Plant',cat:'Plants', src:DECOS+'deco_092.png', w:45, h:108 },
+  { id:'deco_118', name:'Slate Tall Plant',cat:'Plants', src:DECOS+'deco_118.png', w:45, h:108 },
+  { id:'deco_073', name:'White Plant Stand',cat:'Plants', src:DECOS+'deco_073.png', w:55, h:77 },
+  { id:'deco_093', name:'Tan Plant Stand', cat:'Plants', src:DECOS+'deco_093.png', w:55, h:77 },
   // Lamps
-  { id:'deco_133', name:'Floor Lamp A',    cat:'Lamps', src:DECOS+'deco_133.png', w:33, h:90 },
-  { id:'deco_134', name:'Floor Lamp B',    cat:'Lamps', src:DECOS+'deco_134.png', w:33, h:90 },
-  { id:'deco_135', name:'Floor Lamp C',    cat:'Lamps', src:DECOS+'deco_135.png', w:33, h:90 },
-  { id:'deco_136', name:'Floor Lamp D',    cat:'Lamps', src:DECOS+'deco_136.png', w:33, h:90 },
-  { id:'deco_137', name:'Floor Lamp E',    cat:'Lamps', src:DECOS+'deco_137.png', w:33, h:90 },
-  { id:'deco_138', name:'Floor Lamp F',    cat:'Lamps', src:DECOS+'deco_138.png', w:33, h:90 },
+  { id:'deco_133', name:'Green Floor Lamp',cat:'Lamps', src:DECOS+'deco_133.png', w:33, h:90 },
+  { id:'deco_134', name:'Mint Floor Lamp', cat:'Lamps', src:DECOS+'deco_134.png', w:33, h:90 },
+  { id:'deco_135', name:'Lilac Floor Lamp',cat:'Lamps', src:DECOS+'deco_135.png', w:33, h:90 },
+  { id:'deco_136', name:'Blue Floor Lamp', cat:'Lamps', src:DECOS+'deco_136.png', w:33, h:90 },
+  { id:'deco_137', name:'White Floor Lamp',cat:'Lamps', src:DECOS+'deco_137.png', w:33, h:90 },
+  { id:'deco_138', name:'Cream Floor Lamp',cat:'Lamps', src:DECOS+'deco_138.png', w:33, h:90 },
   // Tables
-  { id:'deco_086', name:'Table A',         cat:'Tables', src:DECOS+'deco_086.png', w:55, h:92 },
-  { id:'deco_087', name:'Table B',         cat:'Tables', src:DECOS+'deco_087.png', w:55, h:92 },
-  { id:'deco_088', name:'Table C',         cat:'Tables', src:DECOS+'deco_088.png', w:55, h:92 },
-  { id:'deco_089', name:'Table D',         cat:'Tables', src:DECOS+'deco_089.png', w:55, h:92 },
-  { id:'deco_090', name:'Table E',         cat:'Tables', src:DECOS+'deco_090.png', w:55, h:92 },
-  { id:'deco_112', name:'Coffee Table A',  cat:'Tables', src:DECOS+'deco_112.png', w:61, h:61 },
-  { id:'deco_113', name:'Coffee Table B',  cat:'Tables', src:DECOS+'deco_113.png', w:61, h:61 },
-  { id:'deco_114', name:'Coffee Table C',  cat:'Tables', src:DECOS+'deco_114.png', w:61, h:61 },
-  { id:'deco_115', name:'Coffee Table D',  cat:'Tables', src:DECOS+'deco_115.png', w:61, h:61 },
-  { id:'deco_116', name:'Coffee Table E',  cat:'Tables', src:DECOS+'deco_116.png', w:61, h:61 },
+  { id:'deco_086', name:'White Pedestal Table',cat:'Tables', src:DECOS+'deco_086.png', w:55, h:92 },
+  { id:'deco_087', name:'Cream Pedestal Table',cat:'Tables', src:DECOS+'deco_087.png', w:55, h:92 },
+  { id:'deco_088', name:'Blue Pedestal Table',cat:'Tables', src:DECOS+'deco_088.png', w:55, h:92 },
+  { id:'deco_089', name:'Pink Pedestal Table',cat:'Tables', src:DECOS+'deco_089.png', w:55, h:92 },
+  { id:'deco_090', name:'Mint Pedestal Table',cat:'Tables', src:DECOS+'deco_090.png', w:55, h:92 },
+  { id:'deco_112', name:'Cream Coffee Table',cat:'Tables', src:DECOS+'deco_112.png', w:61, h:61 },
+  { id:'deco_113', name:'Gray Coffee Table',cat:'Tables', src:DECOS+'deco_113.png', w:61, h:61 },
+  { id:'deco_114', name:'Pink Coffee Table',cat:'Tables', src:DECOS+'deco_114.png', w:61, h:61 },
+  { id:'deco_115', name:'Blue Coffee Table',cat:'Tables', src:DECOS+'deco_115.png', w:61, h:61 },
+  { id:'deco_116', name:'Lavender Coffee Table',cat:'Tables', src:DECOS+'deco_116.png', w:61, h:61 },
   // Bowls
-  { id:'deco_082', name:'Bowl A',          cat:'Deco Bowls', src:DECOS+'deco_082.png', w:43, h:37 },
-  { id:'deco_083', name:'Bowl B',          cat:'Deco Bowls', src:DECOS+'deco_083.png', w:43, h:37 },
-  { id:'deco_084', name:'Bowl C',          cat:'Deco Bowls', src:DECOS+'deco_084.png', w:43, h:37 },
-  { id:'deco_085', name:'Bowl D',          cat:'Deco Bowls', src:DECOS+'deco_085.png', w:43, h:37 },
-  { id:'deco_094', name:'Bowl E',          cat:'Deco Bowls', src:DECOS+'deco_094.png', w:43, h:37 },
-  { id:'deco_095', name:'Bowl F',          cat:'Deco Bowls', src:DECOS+'deco_095.png', w:43, h:37 },
-  { id:'deco_096', name:'Bowl G',          cat:'Deco Bowls', src:DECOS+'deco_096.png', w:43, h:37 },
-  { id:'deco_097', name:'Bowl H',          cat:'Deco Bowls', src:DECOS+'deco_097.png', w:43, h:37 },
-  { id:'deco_102', name:'Bowl I',          cat:'Deco Bowls', src:DECOS+'deco_102.png', w:43, h:37 },
-  { id:'deco_103', name:'Bowl J',          cat:'Deco Bowls', src:DECOS+'deco_103.png', w:43, h:37 },
-  { id:'deco_122', name:'Bowl K',          cat:'Deco Bowls', src:DECOS+'deco_122.png', w:43, h:37 },
-  { id:'deco_123', name:'Bowl L',          cat:'Deco Bowls', src:DECOS+'deco_123.png', w:43, h:37 },
-  { id:'deco_140', name:'Bowl M',          cat:'Deco Bowls', src:DECOS+'deco_140.png', w:43, h:37 },
-  { id:'deco_141', name:'Bowl N',          cat:'Deco Bowls', src:DECOS+'deco_141.png', w:43, h:37 },
+  { id:'deco_074', name:'Blue Food Bowl',  cat:'Deco Bowls', src:DECOS+'deco_074.png', w:43, h:37 },
+  { id:'deco_075', name:'Tan Food Bowl',   cat:'Deco Bowls', src:DECOS+'deco_075.png', w:43, h:37 },
+  { id:'deco_076', name:'Blue Water Bowl', cat:'Deco Bowls', src:DECOS+'deco_076.png', w:43, h:37 },
+  { id:'deco_078', name:'Tan Water Bowl',  cat:'Deco Bowls', src:DECOS+'deco_078.png', w:43, h:37 },
+  { id:'deco_082', name:'Purple Food Bowl',cat:'Deco Bowls', src:DECOS+'deco_082.png', w:43, h:37 },
+  { id:'deco_083', name:'White Food Bowl', cat:'Deco Bowls', src:DECOS+'deco_083.png', w:43, h:37 },
+  { id:'deco_084', name:'Purple Water Bowl',cat:'Deco Bowls', src:DECOS+'deco_084.png', w:43, h:37 },
+  { id:'deco_085', name:'White Water Bowl',cat:'Deco Bowls', src:DECOS+'deco_085.png', w:43, h:37 },
+  { id:'deco_094', name:'Brown Food Bowl', cat:'Deco Bowls', src:DECOS+'deco_094.png', w:43, h:37 },
+  { id:'deco_095', name:'Green Food Bowl', cat:'Deco Bowls', src:DECOS+'deco_095.png', w:43, h:37 },
+  { id:'deco_096', name:'Brown Water Bowl',cat:'Deco Bowls', src:DECOS+'deco_096.png', w:43, h:37 },
+  { id:'deco_097', name:'Green Water Bowl',cat:'Deco Bowls', src:DECOS+'deco_097.png', w:43, h:37 },
+  { id:'deco_102', name:'Blue Kibble Bowl',cat:'Deco Bowls', src:DECOS+'deco_102.png', w:43, h:37 },
+  { id:'deco_103', name:'Tan Kibble Bowl', cat:'Deco Bowls', src:DECOS+'deco_103.png', w:43, h:37 },
+  { id:'deco_122', name:'Purple Kibble Bowl',cat:'Deco Bowls', src:DECOS+'deco_122.png', w:43, h:37 },
+  { id:'deco_123', name:'White Kibble Bowl',cat:'Deco Bowls', src:DECOS+'deco_123.png', w:43, h:37 },
+  { id:'deco_140', name:'Brown Kibble Bowl',cat:'Deco Bowls', src:DECOS+'deco_140.png', w:43, h:37 },
+  { id:'deco_141', name:'Green Kibble Bowl',cat:'Deco Bowls', src:DECOS+'deco_141.png', w:43, h:37 },
   // Rugs
-  { id:'deco_005', name:'Pink Rug',        cat:'Rugs', src:DECOS+'deco_005.png', w:22, h:20 },
-  { id:'deco_006', name:'Tan Rug',         cat:'Rugs', src:DECOS+'deco_006.png', w:22, h:20 },
-  { id:'deco_009', name:'Green Rug',       cat:'Rugs', src:DECOS+'deco_009.png', w:22, h:20 },
-  { id:'deco_010', name:'Dark Rug',        cat:'Rugs', src:DECOS+'deco_010.png', w:22, h:20 },
-  { id:'deco_020', name:'Orange Rug',      cat:'Rugs', src:DECOS+'deco_020.png', w:22, h:20 },
-  { id:'deco_021', name:'Red Rug',         cat:'Rugs', src:DECOS+'deco_021.png', w:22, h:20 },
-  { id:'deco_024', name:'Yellow Rug',      cat:'Rugs', src:DECOS+'deco_024.png', w:22, h:20 },
-  { id:'deco_025', name:'Coral Rug',       cat:'Rugs', src:DECOS+'deco_025.png', w:22, h:20 },
-  { id:'deco_030', name:'Peach Rug',       cat:'Rugs', src:DECOS+'deco_030.png', w:22, h:20 },
-  { id:'deco_031', name:'Plum Rug',        cat:'Rugs', src:DECOS+'deco_031.png', w:22, h:20 },
+  { id:'deco_005', name:'Mint Rug',        cat:'Rugs', src:DECOS+'deco_005.png', w:22, h:20 },
+  { id:'deco_006', name:'Sky Rug',         cat:'Rugs', src:DECOS+'deco_006.png', w:22, h:20 },
+  { id:'deco_009', name:'Lavender Rug',    cat:'Rugs', src:DECOS+'deco_009.png', w:22, h:20 },
+  { id:'deco_010', name:'Cream Rug',       cat:'Rugs', src:DECOS+'deco_010.png', w:22, h:20 },
+  { id:'deco_020', name:'Coral Rug',       cat:'Rugs', src:DECOS+'deco_020.png', w:22, h:20 },
+  { id:'deco_021', name:'Teal Rug',        cat:'Rugs', src:DECOS+'deco_021.png', w:22, h:20 },
+  { id:'deco_024', name:'Gray Rug',        cat:'Rugs', src:DECOS+'deco_024.png', w:22, h:20 },
+  { id:'deco_025', name:'Blue Rug',        cat:'Rugs', src:DECOS+'deco_025.png', w:22, h:20 },
+  { id:'deco_030', name:'Purple Rug',      cat:'Rugs', src:DECOS+'deco_030.png', w:22, h:20 },
+  { id:'deco_031', name:'Gold Rug',        cat:'Rugs', src:DECOS+'deco_031.png', w:22, h:20 },
   { id:'deco_034', name:'Lime Rug',        cat:'Rugs', src:DECOS+'deco_034.png', w:22, h:20 },
-  { id:'deco_035', name:'Rose Rug',        cat:'Rugs', src:DECOS+'deco_035.png', w:22, h:20 },
-  { id:'deco_120', name:'Floor Mat A',     cat:'Rugs', src:DECOS+'deco_120.png', w:43, h:34 },
-  { id:'deco_139', name:'Floor Mat B',     cat:'Rugs', src:DECOS+'deco_139.png', w:43, h:34 },
-  { id:'deco_147', name:'Floor Mat C',     cat:'Rugs', src:DECOS+'deco_147.png', w:43, h:34 },
-  { id:'deco_148', name:'Floor Mat D',     cat:'Rugs', src:DECOS+'deco_148.png', w:43, h:34 },
-  { id:'deco_150', name:'Floor Mat E',     cat:'Rugs', src:DECOS+'deco_150.png', w:43, h:34 },
-  { id:'deco_151', name:'Floor Mat F',     cat:'Rugs', src:DECOS+'deco_151.png', w:43, h:34 },
+  { id:'deco_035', name:'Violet Rug',      cat:'Rugs', src:DECOS+'deco_035.png', w:22, h:20 },
+  { id:'deco_120', name:'Blue Fish Mat',   cat:'Rugs', src:DECOS+'deco_120.png', w:43, h:34 },
+  { id:'deco_139', name:'Pink Fish Mat',   cat:'Rugs', src:DECOS+'deco_139.png', w:43, h:34 },
+  { id:'deco_147', name:'Green Fish Mat',  cat:'Rugs', src:DECOS+'deco_147.png', w:43, h:34 },
+  { id:'deco_148', name:'Teal Fish Mat',   cat:'Rugs', src:DECOS+'deco_148.png', w:43, h:34 },
+  { id:'deco_150', name:'Periwinkle Fish Mat',cat:'Rugs', src:DECOS+'deco_150.png', w:43, h:34 },
+  { id:'deco_151', name:'Brown Fish Mat',  cat:'Rugs', src:DECOS+'deco_151.png', w:43, h:34 },
   // Small Decor
-  { id:'deco_048', name:'Bottle A',        cat:'Small Decor', src:DECOS+'deco_048.png', w:25, h:46 },
-  { id:'deco_049', name:'Bottle B',        cat:'Small Decor', src:DECOS+'deco_049.png', w:25, h:46 },
-  { id:'deco_050', name:'Bottle C',        cat:'Small Decor', src:DECOS+'deco_050.png', w:25, h:46 },
-  { id:'deco_057', name:'Bottle D',        cat:'Small Decor', src:DECOS+'deco_057.png', w:25, h:46 },
-  { id:'deco_058', name:'Bottle E',        cat:'Small Decor', src:DECOS+'deco_058.png', w:25, h:46 },
-  { id:'deco_059', name:'Bottle F',        cat:'Small Decor', src:DECOS+'deco_059.png', w:25, h:46 },
-  { id:'deco_098', name:'Cat Treat',       cat:'Small Decor', src:DECOS+'deco_098.png', w:33, h:43 },
-  { id:'deco_099', name:'Scratch Pole',    cat:'Small Decor', src:DECOS+'deco_099.png', w:33, h:63 },
+  { id:'deco_098', name:'Open Food Bag',   cat:'Small Decor', src:DECOS+'deco_098.png', w:33, h:43 },
+  { id:'deco_099', name:'Cat Food Box',    cat:'Small Decor', src:DECOS+'deco_099.png', w:33, h:63 },
   { id:'deco_106', name:'Mouse Toy',       cat:'Small Decor', src:DECOS+'deco_106.png', w:52, h:33 },
   { id:'deco_149', name:'Sleeping Cat',    cat:'Small Decor', src:DECOS+'deco_149.png', w:43, h:32 },
 ];
+
+const ROOM_ZONES = {
+  floor: [
+    { x: 21, y: 323 },
+    { x: 256, y: 197 },
+    { x: 493, y: 323 },
+    { x: 258, y: 456 },
+  ],
+  leftWall: [
+    { x: 20, y: 164 },
+    { x: 256, y: 28 },
+    { x: 256, y: 197 },
+    { x: 21, y: 323 },
+  ],
+  rightWall: [
+    { x: 256, y: 28 },
+    { x: 505, y: 164 },
+    { x: 493, y: 323 },
+    { x: 256, y: 197 },
+  ],
+  roomShell: [
+    { x: 20, y: 164 },
+    { x: 256, y: 28 },
+    { x: 505, y: 164 },
+    { x: 493, y: 323 },
+    { x: 258, y: 456 },
+    { x: 21, y: 323 },
+  ],
+};
+
+const WALL_PLACEMENT_CATEGORIES = new Set(['Wall Art', 'Windows']);
+
+const DEFAULT_FLOOR_FOOTPRINT = {
+  kind: 'contact',
+  contactHeight: 10,
+  fallbackWidth: 0.58,
+  fallbackHeight: 0.22,
+  fallbackBottom: 2,
+  inset: 1,
+  layer: 'solid',
+};
+
+const DECO_BED_FOOTPRINT_ROWS = [
+  { y: 25, minX: 55, maxX: 57 },
+  { y: 26, minX: 51, maxX: 59 },
+  { y: 27, minX: 49, maxX: 61 },
+  { y: 28, minX: 47, maxX: 64 },
+  { y: 29, minX: 46, maxX: 65 },
+  { y: 30, minX: 44, maxX: 66 },
+  { y: 31, minX: 42, maxX: 68 },
+  { y: 32, minX: 41, maxX: 70 },
+  { y: 33, minX: 39, maxX: 72 },
+  { y: 34, minX: 37, maxX: 73 },
+  { y: 35, minX: 35, maxX: 75 },
+  { y: 36, minX: 33, maxX: 77 },
+  { y: 37, minX: 32, maxX: 78 },
+  { y: 38, minX: 31, maxX: 80 },
+  { y: 39, minX: 29, maxX: 82 },
+  { y: 40, minX: 28, maxX: 83 },
+  { y: 41, minX: 28, maxX: 84 },
+  { y: 42, minX: 26, maxX: 85 },
+  { y: 43, minX: 26, maxX: 86 },
+  { y: 44, minX: 27, maxX: 86 },
+  { y: 45, minX: 29, maxX: 85 },
+  { y: 46, minX: 32, maxX: 85 },
+  { y: 47, minX: 32, maxX: 85 },
+  { y: 48, minX: 33, maxX: 83 },
+  { y: 49, minX: 34, maxX: 83 },
+  { y: 50, minX: 35, maxX: 83 },
+  { y: 51, minX: 38, maxX: 83 },
+  { y: 52, minX: 0, maxX: 40 },
+  { y: 52, minX: 41, maxX: 82 },
+  { y: 52, minX: 83, maxX: 109 },
+  { y: 53, minX: 0, maxX: 40 },
+  { y: 53, minX: 41, maxX: 82 },
+  { y: 53, minX: 83, maxX: 109 },
+  { y: 54, minX: 0, maxX: 41 },
+  { y: 54, minX: 42, maxX: 82 },
+  { y: 54, minX: 83, maxX: 108 },
+  { y: 55, minX: 1, maxX: 44 },
+  { y: 55, minX: 45, maxX: 81 },
+  { y: 55, minX: 82, maxX: 107 },
+  { y: 56, minX: 2, maxX: 46 },
+  { y: 56, minX: 47, maxX: 80 },
+  { y: 56, minX: 81, maxX: 106 },
+  { y: 57, minX: 4, maxX: 48 },
+  { y: 57, minX: 49, maxX: 79 },
+  { y: 57, minX: 80, maxX: 105 },
+  { y: 58, minX: 5, maxX: 48 },
+  { y: 58, minX: 49, maxX: 79 },
+  { y: 58, minX: 80, maxX: 104 },
+  { y: 59, minX: 6, maxX: 57 },
+  { y: 59, minX: 58, maxX: 75 },
+  { y: 59, minX: 76, maxX: 102 },
+  { y: 60, minX: 8, maxX: 101 },
+  { y: 61, minX: 9, maxX: 100 },
+  { y: 62, minX: 11, maxX: 99 },
+  { y: 63, minX: 12, maxX: 98 },
+  { y: 64, minX: 13, maxX: 97 },
+  { y: 65, minX: 14, maxX: 95 },
+  { y: 66, minX: 16, maxX: 94 },
+  { y: 67, minX: 18, maxX: 92 },
+  { y: 68, minX: 20, maxX: 91 },
+  { y: 69, minX: 21, maxX: 90 },
+  { y: 70, minX: 23, maxX: 89 },
+  { y: 71, minX: 25, maxX: 87 },
+  { y: 72, minX: 26, maxX: 85 },
+  { y: 73, minX: 28, maxX: 83 },
+  { y: 74, minX: 30, maxX: 81 },
+  { y: 75, minX: 32, maxX: 79 },
+  { y: 76, minX: 33, maxX: 78 },
+  { y: 77, minX: 34, maxX: 77 },
+  { y: 78, minX: 35, maxX: 75 },
+  { y: 79, minX: 37, maxX: 74 },
+  { y: 80, minX: 38, maxX: 72 },
+  { y: 81, minX: 40, maxX: 70 },
+];
+
+const FLOOR_FOOTPRINT_BY_CATEGORY = {
+  Beds: {
+    kind: 'contact',
+    contactHeight: 30,
+    fallbackWidth: 0.82,
+    fallbackHeight: 0.48,
+  },
+  'Deco Beds': {
+    kind: 'rows',
+    rows: DECO_BED_FOOTPRINT_ROWS,
+    fallbackWidth: 0.82,
+    fallbackHeight: 0.66,
+  },
+  Tables: {
+    kind: 'contact',
+    contactHeight: 16,
+    fallbackWidth: 0.78,
+    fallbackHeight: 0.18,
+  },
+  Bookcases: {
+    kind: 'contact',
+    contactHeight: 18,
+    fallbackWidth: 0.82,
+    fallbackHeight: 0.18,
+  },
+  'Cat Trees': {
+    kind: 'contact',
+    contactHeight: 18,
+    fallbackWidth: 0.62,
+    fallbackHeight: 0.24,
+  },
+  'Deco Towers': {
+    kind: 'contact',
+    contactHeight: 18,
+    fallbackWidth: 0.62,
+    fallbackHeight: 0.24,
+  },
+  Furniture: {
+    kind: 'contact',
+    contactHeight: 16,
+    fallbackWidth: 0.72,
+    fallbackHeight: 0.36,
+  },
+  Plants: {
+    kind: 'contact',
+    contactHeight: 12,
+    fallbackWidth: 0.58,
+    fallbackHeight: 0.22,
+  },
+  Lamps: {
+    kind: 'contact',
+    contactHeight: 10,
+    fallbackWidth: 0.50,
+    fallbackHeight: 0.20,
+  },
+  Toys: {
+    kind: 'contact',
+    contactHeight: 10,
+    fallbackWidth: 0.58,
+    fallbackHeight: 0.22,
+  },
+  Food: {
+    kind: 'visible',
+    inset: 1,
+    layer: 'flat',
+  },
+  'Deco Bowls': {
+    kind: 'visible',
+    inset: 1,
+    layer: 'flat',
+  },
+  Rugs: {
+    kind: 'visible',
+    inset: 1,
+    layer: 'underlay',
+  },
+  'Small Decor': {
+    kind: 'contact',
+    contactHeight: 12,
+    fallbackWidth: 0.62,
+    fallbackHeight: 0.26,
+  },
+};
+
+const FLOOR_FOOTPRINT_BY_ID = {
+  'home-blue': { contactHeight: 22, fallbackWidth: 0.76, fallbackHeight: 0.34 },
+  'home-green': { contactHeight: 22, fallbackWidth: 0.76, fallbackHeight: 0.34 },
+  'home-purple': { contactHeight: 22, fallbackWidth: 0.76, fallbackHeight: 0.34 },
+  'home-brown': { contactHeight: 22, fallbackWidth: 0.76, fallbackHeight: 0.34 },
+  catfood: { kind: 'contact', contactHeight: 12, fallbackWidth: 0.58, fallbackHeight: 0.28 },
+  'toy-cat': { kind: 'visible', inset: 1, layer: 'flat' },
+  'toy-mouse': { kind: 'visible', inset: 1, layer: 'flat' },
+  'ball-blue': { kind: 'visible', inset: 1, layer: 'flat' },
+  'ball-orange': { kind: 'visible', inset: 1, layer: 'flat' },
+  'ball-pink': { kind: 'visible', inset: 1, layer: 'flat' },
+  deco_040: { contactHeight: 14, fallbackWidth: 0.82, fallbackHeight: 0.24 },
+  deco_098: { contactHeight: 16, fallbackWidth: 0.70, fallbackHeight: 0.34 },
+  deco_099: { contactHeight: 14, fallbackWidth: 0.68, fallbackHeight: 0.28 },
+  deco_106: { kind: 'visible', inset: 1, layer: 'flat' },
+  deco_149: { kind: 'visible', inset: 1, layer: 'flat' },
+};
+
+const MOCHI_FOOTPRINT_RATIO = 0.32;
+const MOCHI_COLLISION_FALLBACK = { x: 8, y: 48, w: 44, h: 14 };
+
+function getCatalogItem(id) {
+  return CATALOG.find(item => item.id === id);
+}
+
+function getPlacementSurface(id) {
+  const def = getCatalogItem(id);
+  if (!def) return 'floor';
+  if (WALL_PLACEMENT_CATEGORIES.has(def.cat)) return 'wall';
+  return 'floor';
+}
+
+function getFloorFootprintRule(id) {
+  const def = getCatalogItem(id);
+  const categoryRule = def ? FLOOR_FOOTPRINT_BY_CATEGORY[def.cat] : null;
+  const idRule = FLOOR_FOOTPRINT_BY_ID[id] || null;
+  if (id?.startsWith('bowl-') || id?.startsWith('fish-')) {
+    return { ...DEFAULT_FLOOR_FOOTPRINT, kind: 'visible', inset: 1, layer: 'flat' };
+  }
+  return { ...DEFAULT_FLOOR_FOOTPRINT, ...categoryRule, ...idRule };
+}
+
+function isFlatFloorItem(id) {
+  return getFloorFootprintRule(id).layer === 'flat' || getFloorFootprintRule(id).layer === 'underlay';
+}
+
+function isUnderlayFloorItem(id) {
+  return getFloorFootprintRule(id).layer === 'underlay';
+}
+
+function getRowsBounds(rows) {
+  if (!rows.length) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const row of rows) {
+    minX = Math.min(minX, row.minX);
+    maxX = Math.max(maxX, row.maxX);
+    minY = Math.min(minY, row.y);
+    maxY = Math.max(maxY, row.y);
+  }
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+function getRowsFromRect(rect) {
+  const rows = [];
+  const startY = Math.ceil(rect.y);
+  const endY = Math.floor(rect.y + rect.h - 1);
+  for (let y = startY; y <= endY; y++) {
+    rows.push({ y, minX: rect.x, maxX: rect.x + rect.w - 1 });
+  }
+  return rows;
+}
+
+function insetRows(rows, inset = 0) {
+  if (!inset) return rows;
+  return rows
+    .map((row) => ({ y: row.y, minX: row.minX + inset, maxX: row.maxX - inset }))
+    .filter((row) => row.maxX >= row.minX);
+}
+
+function getLocalFootprintRows(shape, rule) {
+  if (rule.kind === 'rows') {
+    return rule.rows.map((row) => ({ y: row.y, minX: row.minX, maxX: row.maxX }));
+  }
+
+  if (rule.kind === 'visible') {
+    const rows = [];
+    for (let y = shape.visible.y; y < shape.visible.y + shape.visible.h; y++) {
+      const row = shape.rows[y];
+      if (row) rows.push({ y, minX: row.minX, maxX: row.maxX });
+    }
+    return insetRows(rows, rule.inset || 0);
+  }
+
+  if (rule.kind === 'rect') {
+    return getRowsFromRect({
+      x: rule.x,
+      y: rule.y,
+      w: rule.w,
+      h: rule.h,
+    });
+  }
+
+  const contactHeight = Math.max(1, Math.min(rule.contactHeight || DEFAULT_FLOOR_FOOTPRINT.contactHeight, shape.visible.h));
+  const startY = shape.visible.y + shape.visible.h - contactHeight;
+  const endY = shape.visible.y + shape.visible.h - 1;
+  const rows = [];
+  for (let y = startY; y <= endY; y++) {
+    const row = shape.rows[y];
+    if (row) rows.push({ y, minX: row.minX, maxX: row.maxX });
+  }
+  return insetRows(rows, rule.inset || 0);
+}
+
+function getFallbackFootprintRows(rule, dims) {
+  if (rule.kind === 'rows') {
+    return rule.rows.map((row) => ({ y: row.y, minX: row.minX, maxX: row.maxX }));
+  }
+
+  if (rule.kind === 'visible') {
+    return getRowsFromRect({ x: 0, y: 0, w: dims.w, h: dims.h });
+  }
+
+  if (rule.kind === 'rect') {
+    return getRowsFromRect({
+      x: rule.x,
+      y: rule.y,
+      w: rule.w,
+      h: rule.h,
+    });
+  }
+
+  const width = Math.max(rule.minWidth || 12, dims.w * (rule.fallbackWidth || DEFAULT_FLOOR_FOOTPRINT.fallbackWidth));
+  const height = rule.contactHeight || Math.max(1, dims.h * (rule.fallbackHeight || DEFAULT_FLOOR_FOOTPRINT.fallbackHeight));
+  return getRowsFromRect({
+    x: (dims.w - width) / 2,
+    y: dims.h - height - (rule.fallbackBottom ?? DEFAULT_FLOOR_FOOTPRINT.fallbackBottom),
+    w: width,
+    h: height,
+  });
+}
+
+function toWorldFootprint(localRows, x, y, layer = 'solid', scale = 1, flipWidth = null) {
+  const rows = [];
+  for (const row of localRows) {
+    const minX = flipWidth === null ? row.minX : flipWidth - row.maxX - 1;
+    const maxX = flipWidth === null ? row.maxX : flipWidth - row.minX - 1;
+    const startY = Math.round(y + row.y * scale);
+    const repeat = Math.max(1, Math.round(scale));
+    for (let i = 0; i < repeat; i++) {
+      rows.push({
+        y: startY + i,
+        minX: x + minX * scale,
+        maxX: x + (maxX + 1) * scale - 1,
+      });
+    }
+  }
+  return { layer, rows, rect: getRowsBounds(rows) || { x, y, w: 1, h: 1 } };
+}
+
+const OPAQUE_ALPHA_THRESHOLD = 20;
+const itemShapeCache = new Map();
+const mochiShapeCache = new Map();
+
+function getSourceDims(def) {
+  return {
+    w: def?.cropW || def?.w || 32,
+    h: def?.cropH || def?.h || 32,
+  };
+}
+
+function makeFallbackShape(def) {
+  const dims = getSourceDims(def);
+  const rows = Array.from({ length: dims.h }, () => null);
+  for (let y = 0; y < dims.h; y++) rows[y] = { minX: 0, maxX: dims.w - 1 };
+  return {
+    ready: false,
+    sourceW: dims.w,
+    sourceH: dims.h,
+    visible: { x: 0, y: 0, w: dims.w, h: dims.h },
+    rows,
+  };
+}
+
+function getSpriteShape(id) {
+  const def = getCatalogItem(id);
+  if (!def) return makeFallbackShape(null);
+
+  const fallback = makeFallbackShape(def);
+  const img = itemImgs[def.src];
+  if (!img) return fallback;
+  if (itemShapeCache.has(id)) return itemShapeCache.get(id);
+
+  const source = getSourceDims(def);
+  const canvas = document.createElement('canvas');
+  canvas.width = source.w;
+  canvas.height = source.h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.clearRect(0, 0, source.w, source.h);
+  ctx.drawImage(img, def.cropX || 0, def.cropY || 0, source.w, source.h, 0, 0, source.w, source.h);
+
+  const data = ctx.getImageData(0, 0, source.w, source.h).data;
+  const rows = Array.from({ length: source.h }, () => null);
+  let minX = source.w, minY = source.h, maxX = -1, maxY = -1;
+
+  for (let y = 0; y < source.h; y++) {
+    let rowMin = source.w, rowMax = -1;
+    for (let x = 0; x < source.w; x++) {
+      const alpha = data[(y * source.w + x) * 4 + 3];
+      if (alpha <= OPAQUE_ALPHA_THRESHOLD) continue;
+      rowMin = Math.min(rowMin, x);
+      rowMax = Math.max(rowMax, x);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+    if (rowMax >= 0) rows[y] = { minX: rowMin, maxX: rowMax };
+  }
+
+  const shape = maxX >= 0
+    ? {
+        ready: true,
+        sourceW: source.w,
+        sourceH: source.h,
+        visible: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 },
+        rows,
+      }
+    : fallback;
+
+  itemShapeCache.set(id, shape);
+  return shape;
+}
+
+function getLocalRectFromBounds(bounds, inset = 0) {
+  const safeInsetX = Math.min(inset, bounds.w / 2);
+  const safeInsetY = Math.min(inset, bounds.h / 2);
+  return {
+    x: bounds.x + safeInsetX,
+    y: bounds.y + safeInsetY,
+    w: Math.max(1, bounds.w - safeInsetX * 2),
+    h: Math.max(1, bounds.h - safeInsetY * 2),
+  };
+}
+
+function getLocalBottomBand(shape, ratio, minHeight = 6, maxHeight = 32) {
+  const bandHeight = Math.max(minHeight, Math.min(maxHeight, Math.ceil(shape.visible.h * ratio), shape.visible.h));
+  const startY = shape.visible.y + shape.visible.h - bandHeight;
+  const endY = shape.visible.y + shape.visible.h - 1;
+  let minX = shape.sourceW, minY = shape.sourceH, maxX = -1, maxY = -1;
+
+  for (let y = startY; y <= endY; y++) {
+    const row = shape.rows[y];
+    if (!row) continue;
+    minX = Math.min(minX, row.minX);
+    maxX = Math.max(maxX, row.maxX);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+
+  if (maxX < 0) return getLocalRectFromBounds(shape.visible);
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+function toWorldRect(localRect, x, y, inset = 0) {
+  const rect = getLocalRectFromBounds(localRect, inset);
+  return {
+    x: x + rect.x,
+    y: y + rect.y,
+    w: rect.w,
+    h: rect.h,
+  };
+}
+
+function scanCanvasShape(canvas) {
+  const sourceW = canvas.width;
+  const sourceH = canvas.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const data = ctx.getImageData(0, 0, sourceW, sourceH).data;
+  const rows = Array.from({ length: sourceH }, () => null);
+  let minX = sourceW, minY = sourceH, maxX = -1, maxY = -1;
+
+  for (let y = 0; y < sourceH; y++) {
+    let rowMin = sourceW, rowMax = -1;
+    for (let x = 0; x < sourceW; x++) {
+      const alpha = data[(y * sourceW + x) * 4 + 3];
+      if (alpha <= OPAQUE_ALPHA_THRESHOLD) continue;
+      rowMin = Math.min(rowMin, x);
+      rowMax = Math.max(rowMax, x);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+    if (rowMax >= 0) rows[y] = { minX: rowMin, maxX: rowMax };
+  }
+
+  if (maxX < 0) return null;
+  return {
+    ready: true,
+    sourceW,
+    sourceH,
+    visible: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 },
+    rows,
+  };
+}
+
+function getMochiFrameShape() {
+  if (
+    typeof mochiImgs === 'undefined'
+    || typeof mochiAnim === 'undefined'
+    || typeof mochiFrame === 'undefined'
+  ) return null;
+
+  const anim = ANIMS[mochiAnim];
+  const img = mochiImgs[mochiAnim];
+  if (!anim || !img) return null;
+
+  const frame = Math.max(0, Math.min((mochiFrame || 1) - 1, anim.frames - 1));
+  const key = mochiAnim + ':' + frame;
+  if (mochiShapeCache.has(key)) return mochiShapeCache.get(key);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.clearRect(0, 0, S, S);
+  ctx.drawImage(img, frame * S, 0, S, S, 0, 0, S, S);
+
+  const shape = scanCanvasShape(canvas);
+  if (shape) mochiShapeCache.set(key, shape);
+  return shape;
+}
+
+function getMochiFootprint() {
+  return getMochiFootprintAt(mochiX, mochiY, mochiFlip);
+}
+
+function getMochiFootprintAt(x, y, flip = false) {
+  if (typeof x !== 'number' || typeof y !== 'number') return null;
+  return toWorldFootprint(MOCHI_BASE_FOOTPRINT_ROWS, Math.round(x), Math.round(y), 'solid', 1, flip ? MOCHI_DRAW_SIZE : null);
+}
+
+function getMochiCollisionRect() {
+  return getMochiFootprint()?.rect || null;
+}
+
+function getCollisionRect(id, x, y, dims) {
+  return getCollisionFootprint(id, x, y, dims).rect;
+}
+
+function getCollisionFootprint(id, x, y, dims) {
+  const surface = getPlacementSurface(id);
+  const shape = getSpriteShape(id);
+  if (surface === 'wall') {
+    const rect = shape.ready
+      ? toWorldRect(shape.visible, x, y, 2)
+      : {
+        x: x + 3,
+        y: y + 3,
+        w: Math.max(1, dims.w - 6),
+        h: Math.max(1, dims.h - 6),
+      };
+    return { layer: 'wall', rows: getRowsFromRect(rect), rect };
+  }
+
+  return getFloorSupportFootprint(id, x, y, dims);
+}
+
+function getPreviewCollisionRect(id, x, y, dims) {
+  return getCollisionRect(id, x, y, dims);
+}
+
+function getPreviewFootprint(id, x, y, dims) {
+  return getCollisionFootprint(id, x, y, dims);
+}
+
+function getFloorSupportRect(id, x, y, dims) {
+  return getFloorSupportFootprint(id, x, y, dims).rect;
+}
+
+function getFloorSupportFootprint(id, x, y, dims) {
+  const rule = getFloorFootprintRule(id);
+  const shape = getSpriteShape(id);
+  const localRows = shape.ready
+    ? getLocalFootprintRows(shape, rule)
+    : getFallbackFootprintRows(rule, dims);
+  return toWorldFootprint(localRows, x, y, rule.layer || 'solid');
+}
+
+function getVisibleFootprint(id, x, y, dims) {
+  const shape = getSpriteShape(id);
+  if (!shape.ready) {
+    return toWorldFootprint(getRowsFromRect({ x: 0, y: 0, w: dims.w, h: dims.h }), x, y, 'visible');
+  }
+
+  const rows = [];
+  for (let y = shape.visible.y; y < shape.visible.y + shape.visible.h; y++) {
+    const row = shape.rows[y];
+    if (row) rows.push({ y, minX: row.minX, maxX: row.maxX });
+  }
+  return toWorldFootprint(rows, x, y, 'visible');
+}
+
+function rectsOverlap(a, b, tolerance = 2) {
+  const overlapX = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const overlapY = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return overlapX > tolerance && overlapY > tolerance;
+}
+
+function footprintsOverlap(a, b, tolerance = 2) {
+  if (!rectsOverlap(a.rect, b.rect, tolerance)) return false;
+
+  const bRowsByY = new Map();
+  for (const row of b.rows) {
+    const y = Math.round(row.y);
+    const rows = bRowsByY.get(y) || [];
+    rows.push(row);
+    bRowsByY.set(y, rows);
+  }
+
+  for (const aRow of a.rows) {
+    const matchingRows = bRowsByY.get(Math.round(aRow.y));
+    if (!matchingRows) continue;
+    for (const bRow of matchingRows) {
+      const overlapX = Math.min(aRow.maxX, bRow.maxX) - Math.max(aRow.minX, bRow.minX) + 1;
+      if (overlapX > tolerance) return true;
+    }
+  }
+
+  return false;
+}
+
+function getRectPoints(rect, inset = 2) {
+  const left = rect.x + Math.min(inset, rect.w / 2);
+  const right = rect.x + rect.w - Math.min(inset, rect.w / 2);
+  const top = rect.y + Math.min(inset, rect.h / 2);
+  const bottom = rect.y + rect.h - Math.min(inset, rect.h / 2);
+  const centerX = rect.x + rect.w / 2;
+  const centerY = rect.y + rect.h / 2;
+  return [
+    { x: left, y: top },
+    { x: right, y: top },
+    { x: left, y: bottom },
+    { x: right, y: bottom },
+    { x: centerX, y: centerY },
+  ];
+}
+
+function footprintIsOnFloor(footprint) {
+  if (!footprint?.rows?.length) return false;
+  return footprintFitsPolygon(footprint, ROOM_ZONES.floor);
+}
+
+function footprintFitsPolygon(footprint, polygon) {
+  if (!footprint?.rows?.length) return false;
+  for (const row of footprint.rows) {
+    const points = [
+      { x: row.minX, y: row.y },
+      { x: row.maxX, y: row.y },
+      { x: (row.minX + row.maxX) / 2, y: row.y },
+    ];
+    if (!points.every((point) => pointInPolygon(point, polygon))) return false;
+  }
+  return true;
+}
+
+function visibleShapeFitsRoom(id, x, y, dims) {
+  return footprintFitsPolygon(getVisibleFootprint(id, x, y, dims), ROOM_ZONES.roomShell);
+}
+
+function visibleShapeFitsWall(id, x, y, dims, wall) {
+  const shape = getSpriteShape(id);
+  if (!shape.ready) {
+    const def = getCatalogItem(id);
+    const points = getPlacementPoints(id, x, y, dims);
+    if (def?.cat !== 'Windows') {
+      return getRectPoints({ x, y, w: dims.w, h: dims.h }).every((point) => pointInPolygon(point, wall));
+    }
+    return (
+      pointInPolygon(points.topCenter, wall)
+      && pointInPolygon(points.center, wall)
+      && pointInPolygon(points.bottomCenter, wall)
+    );
+  }
+
+  return footprintFitsPolygon(getVisibleFootprint(id, x, y, dims), wall);
+}
+
+function validateItemCollision(id, x, y, dims, ignoreIndex = -1) {
+  const surface = getPlacementSurface(id);
+  const def = getCatalogItem(id);
+  const name = def?.name || 'Item';
+  const candidateFootprint = getCollisionFootprint(id, x, y, dims);
+  const placedItems = typeof getPlacedItems === 'function' ? getPlacedItems() : [];
+
+  for (let i = 0; i < placedItems.length; i++) {
+    if (i === ignoreIndex) continue;
+    const other = placedItems[i];
+    const otherDef = getCatalogItem(other.id);
+    const otherSurface = getPlacementSurface(other.id);
+    const otherDims = getItemDims(other);
+    if (otherSurface !== surface) continue;
+    if (isUnderlayFloorItem(id) !== isUnderlayFloorItem(other.id)) continue;
+
+    const otherFootprint = getCollisionFootprint(other.id, other.x, other.y, otherDims);
+    if (!footprintsOverlap(candidateFootprint, otherFootprint)) continue;
+
+    const otherName = otherDef?.name || 'another item';
+    const reason = surface === 'wall' ? 'Wall items cannot overlap.' : 'Their bases overlap.';
+    return { valid: false, surface, message: `Move ${name} away from ${otherName}. ${reason}` };
+  }
+
+  return { valid: true, surface, message: `${name} has room here.` };
+}
+
+function validateMochiCollision(id, x, y, dims) {
+  const surface = getPlacementSurface(id);
+  const def = getCatalogItem(id);
+  const name = def?.name || 'Item';
+  if (surface !== 'floor') return { valid: true, surface, message: `${name} has room here.` };
+
+  const mochiFootprint = getMochiFootprint();
+  if (!mochiFootprint) return { valid: true, surface, message: `${name} has room here.` };
+
+  const itemFootprint = getCollisionFootprint(id, x, y, dims);
+  if (!footprintsOverlap(itemFootprint, mochiFootprint)) {
+    return { valid: true, surface, message: `${name} has room here.` };
+  }
+
+  return {
+    valid: false,
+    surface,
+    message: `Move ${name} away from Mochi. Mochi is standing there.`,
+  };
+}
+
+function pointOnSegment(point, a, b) {
+  const cross = (point.y - a.y) * (b.x - a.x) - (point.x - a.x) * (b.y - a.y);
+  if (Math.abs(cross) > 0.01) return false;
+  const dot = (point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y);
+  if (dot < 0) return false;
+  const lenSq = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
+  return dot <= lenSq;
+}
+
+function pointInPolygon(point, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i], b = polygon[j];
+    if (pointOnSegment(point, a, b)) return true;
+    const intersects = (a.y > point.y) !== (b.y > point.y)
+      && point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function getWallSide(point) {
+  if (pointInPolygon(point, ROOM_ZONES.leftWall)) return 'leftWall';
+  if (pointInPolygon(point, ROOM_ZONES.rightWall)) return 'rightWall';
+  return null;
+}
+
+function getPlacementPoints(id, x, y, dims) {
+  const centerX = x + dims.w / 2;
+  const centerY = y + dims.h / 2;
+  return {
+    center: { x: centerX, y: centerY },
+    topCenter: { x: centerX, y: y + 2 },
+    bottomCenter: { x: centerX, y: y + dims.h - 2 },
+    leftFoot: { x: x + dims.w * 0.28, y: y + dims.h - 2 },
+    rightFoot: { x: x + dims.w * 0.72, y: y + dims.h - 2 },
+    floorCenter: { x: centerX, y: y + dims.h * 0.55 },
+    topLeft: { x: x + 2, y: y + 2 },
+    topRight: { x: x + dims.w - 2, y: y + 2 },
+    bottomLeft: { x: x + 2, y: y + dims.h - 2 },
+    bottomRight: { x: x + dims.w - 2, y: y + dims.h - 2 },
+  };
+}
+
+function validatePlacement(id, x, y, dims, options = {}) {
+  const surface = getPlacementSurface(id);
+  const def = getCatalogItem(id);
+  const name = def?.name || 'Item';
+  const inCanvas = x >= 0 && y >= 0 && x + dims.w <= 512 && y + dims.h <= 512;
+  if (!inCanvas) {
+    return { valid: false, surface, message: `Keep ${name} inside the room.` };
+  }
+
+  const points = getPlacementPoints(id, x, y, dims);
+  if (surface === 'wall') {
+    const wallSide = getWallSide(points.center);
+    const wall = wallSide ? ROOM_ZONES[wallSide] : null;
+    const hangsOnWall = wall && visibleShapeFitsWall(id, x, y, dims, wall);
+    if (!hangsOnWall) return { valid: false, surface, message: `Put ${name} on the wall.` };
+    return validateItemCollision(id, x, y, dims, options.ignoreIndex);
+  }
+
+  const floorFootprint = getFloorSupportFootprint(id, x, y, dims);
+  const footIsOnFloor = footprintIsOnFloor(floorFootprint);
+
+  if (!footIsOnFloor) {
+    return { valid: false, surface, message: `Put ${name} on the floor.` };
+  }
+
+  if (!visibleShapeFitsRoom(id, x, y, dims)) {
+    return { valid: false, surface, message: `Keep ${name} inside the room.` };
+  }
+
+  const mochiPlacement = validateMochiCollision(id, x, y, dims);
+  if (!mochiPlacement.valid) return mochiPlacement;
+
+  return validateItemCollision(id, x, y, dims, options.ignoreIndex);
+}
+
+function getMochiBlockingFootprints() {
+  const blockers = [];
+  const placedItems = typeof getPlacedItems === 'function' ? getPlacedItems() : [];
+  for (const item of placedItems) {
+    if (getPlacementSurface(item.id) !== 'floor') continue;
+    if (isUnderlayFloorItem(item.id)) continue;
+    blockers.push(getCollisionFootprint(item.id, item.x, item.y, getItemDims(item)));
+  }
+  return blockers;
+}
+
+function inflateFootprint(footprint, amount = 0) {
+  const expand = Math.max(0, Math.round(amount));
+  if (!expand || !footprint?.rows?.length) return footprint;
+
+  const rowsByY = new Map();
+  for (const row of footprint.rows) {
+    const y = Math.round(row.y);
+    for (let dy = -expand; dy <= expand; dy++) {
+      const key = y + dy;
+      const existing = rowsByY.get(key);
+      const minX = row.minX - expand;
+      const maxX = row.maxX + expand;
+      rowsByY.set(key, existing
+        ? { y: key, minX: Math.min(existing.minX, minX), maxX: Math.max(existing.maxX, maxX) }
+        : { y: key, minX, maxX });
+    }
+  }
+
+  const rows = [...rowsByY.values()].sort((a, b) => a.y - b.y);
+  return { ...footprint, rows, rect: getRowsBounds(rows) || footprint.rect };
+}
+
+function rectDistance(a, b) {
+  const ax2 = a.x + a.w;
+  const ay2 = a.y + a.h;
+  const bx2 = b.x + b.w;
+  const by2 = b.y + b.h;
+  const dx = Math.max(b.x - ax2, a.x - bx2, 0);
+  const dy = Math.max(b.y - ay2, a.y - by2, 0);
+  return Math.hypot(dx, dy);
+}
+
+function getMochiClearance(x, y, blockers = getMochiBlockingFootprints()) {
+  const footprint = getMochiFootprintAt(x, y, false);
+  if (!footprint || !footprintIsOnFloor(footprint)) return -Infinity;
+  let clearance = Infinity;
+  for (const blocker of blockers) {
+    if (footprintsOverlap(footprint, blocker, 1)) return -Infinity;
+    clearance = Math.min(clearance, rectDistance(footprint.rect, blocker.rect));
+  }
+  return clearance === Infinity ? 999 : clearance;
+}
+
+function isMochiPositionWalkable(x, y, blockers = getMochiBlockingFootprints(), clearance = 0) {
+  if (x < 0 || y < 0 || x + MOCHI_DRAW_SIZE > 512 || y + MOCHI_DRAW_SIZE > 512) return false;
+  const footprint = getMochiFootprintAt(x, y, false);
+  if (!footprint || !footprintIsOnFloor(footprint)) return false;
+  const testFootprint = clearance > 0 ? inflateFootprint(footprint, clearance) : footprint;
+  return !blockers.some((blocker) => footprintsOverlap(testFootprint, blocker, 1));
+}
+
+function topLeftFromMochiFootCenter(x, y) {
+  return {
+    x: Math.round(x - MOCHI_FOOT_CENTER.x),
+    y: Math.round(y - MOCHI_FOOT_CENTER.y),
+  };
+}
+
+function findNearestWalkableMochiPosition(x, y, blockers = getMochiBlockingFootprints(), maxRadius = 160, options = {}) {
+  if (typeof maxRadius === 'object') {
+    options = maxRadius;
+    maxRadius = options.maxRadius ?? 160;
+  }
+
+  const preferClearance = options.preferClearance || false;
+  const targetClearance = options.targetClearance ?? MOCHI_TARGET_CLEARANCE;
+  const clearanceWeight = options.clearanceWeight ?? 0.55;
+  const minSearchRadius = options.minSearchRadius ?? (preferClearance ? 48 : 0);
+  const step = MOCHI_PATH_GRID / 2;
+  let best = null;
+  let bestScore = Infinity;
+
+  const consider = (candidate) => {
+    if (!isMochiPositionWalkable(candidate.x, candidate.y, blockers)) return;
+    const dist = Math.hypot(candidate.x - x, candidate.y - y);
+    const clearance = getMochiClearance(candidate.x, candidate.y, blockers);
+    const clearanceBonus = Math.min(Math.max(clearance, 0), targetClearance) * clearanceWeight;
+    const crampedPenalty = preferClearance && clearance < targetClearance
+      ? (targetClearance - Math.max(clearance, 0)) * 3
+      : 0;
+    const score = dist + crampedPenalty - clearanceBonus;
+    if (score < bestScore) {
+      best = { x: candidate.x, y: candidate.y, clearance };
+      bestScore = score;
+    }
+  };
+
+  consider({ x: Math.round(x), y: Math.round(y) });
+  if (best && (!preferClearance || best.clearance >= targetClearance)) {
+    return { x: best.x, y: best.y };
+  }
+
+  for (let radius = step; radius <= maxRadius; radius += step) {
+    for (let dx = -radius; dx <= radius; dx += step) {
+      for (const dy of [-radius, radius]) {
+        const candidate = { x: Math.round(x + dx), y: Math.round(y + dy) };
+        consider(candidate);
+      }
+    }
+    for (let dy = -radius + step; dy <= radius - step; dy += step) {
+      for (const dx of [-radius, radius]) {
+        const candidate = { x: Math.round(x + dx), y: Math.round(y + dy) };
+        consider(candidate);
+      }
+    }
+    if (best && radius >= minSearchRadius && (!preferClearance || best.clearance >= targetClearance)) {
+      return { x: best.x, y: best.y };
+    }
+  }
+
+  return best ? { x: best.x, y: best.y } : null;
+}
+
+function lineIsWalkableForMochi(from, to, blockers, clearance = 0) {
+  const dist = Math.hypot(to.x - from.x, to.y - from.y);
+  const steps = Math.max(1, Math.ceil(dist / (MOCHI_PATH_GRID / 2)));
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const x = from.x + (to.x - from.x) * t;
+    const y = from.y + (to.y - from.y) * t;
+    if (!isMochiPositionWalkable(x, y, blockers, clearance)) return false;
+  }
+  return true;
+}
+
+function simplifyMochiPath(path, blockers, clearance = 0) {
+  if (path.length <= 2) return path;
+  const simplified = [path[0]];
+  let anchor = 0;
+
+  while (anchor < path.length - 1) {
+    let next = path.length - 1;
+    while (next > anchor + 1 && !lineIsWalkableForMochi(path[anchor], path[next], blockers, clearance)) next--;
+    simplified.push(path[next]);
+    anchor = next;
+  }
+
+  return simplified;
+}
+
+function findMochiPath(startX, startY, endX, endY, blockers = getMochiBlockingFootprints()) {
+  const start = findNearestWalkableMochiPosition(startX, startY, blockers, 96);
+  const goal = isMochiPositionWalkable(endX, endY, blockers)
+    ? { x: Math.round(endX), y: Math.round(endY) }
+    : findNearestWalkableMochiPosition(endX, endY, blockers, 180, {
+      preferClearance: true,
+      targetClearance: MOCHI_TARGET_CLEARANCE,
+    });
+  if (!start || !goal) return [];
+  if (lineIsWalkableForMochi(start, goal, blockers)) return [goal];
+
+  const keyFor = (x, y) => `${x},${y}`;
+  const heuristic = (node) => Math.hypot(node.x - goal.x, node.y - goal.y);
+  const startNode = {
+    x: Math.round(start.x / MOCHI_PATH_GRID) * MOCHI_PATH_GRID,
+    y: Math.round(start.y / MOCHI_PATH_GRID) * MOCHI_PATH_GRID,
+  };
+  const goalNode = {
+    x: Math.round(goal.x / MOCHI_PATH_GRID) * MOCHI_PATH_GRID,
+    y: Math.round(goal.y / MOCHI_PATH_GRID) * MOCHI_PATH_GRID,
+  };
+  if (!isMochiPositionWalkable(startNode.x, startNode.y, blockers)) {
+    startNode.x = start.x;
+    startNode.y = start.y;
+  }
+  if (!isMochiPositionWalkable(goalNode.x, goalNode.y, blockers)) {
+    goalNode.x = goal.x;
+    goalNode.y = goal.y;
+  }
+
+  const open = [{ ...startNode, g: 0, f: heuristic(startNode), parent: null }];
+  const best = new Map([[keyFor(startNode.x, startNode.y), open[0]]]);
+  const closed = new Set();
+  const dirs = [
+    [MOCHI_PATH_GRID, 0, 1],
+    [-MOCHI_PATH_GRID, 0, 1],
+    [0, MOCHI_PATH_GRID, 1],
+    [0, -MOCHI_PATH_GRID, 1],
+    [MOCHI_PATH_GRID, MOCHI_PATH_GRID, 1.4],
+    [MOCHI_PATH_GRID, -MOCHI_PATH_GRID, 1.4],
+    [-MOCHI_PATH_GRID, MOCHI_PATH_GRID, 1.4],
+    [-MOCHI_PATH_GRID, -MOCHI_PATH_GRID, 1.4],
+  ];
+  let visited = 0;
+
+  while (open.length && visited++ < MOCHI_PATH_MAX_NODES) {
+    open.sort((a, b) => a.f - b.f);
+    const current = open.shift();
+    const currentKey = keyFor(current.x, current.y);
+    if (closed.has(currentKey)) continue;
+    closed.add(currentKey);
+
+    if (Math.hypot(current.x - goalNode.x, current.y - goalNode.y) <= MOCHI_PATH_GRID) {
+      const path = [goal];
+      let node = current;
+      while (node.parent) {
+        path.unshift({ x: node.x, y: node.y });
+        node = node.parent;
+      }
+      return simplifyMochiPath(path, blockers);
+    }
+
+    for (const [dx, dy, cost] of dirs) {
+      const nx = current.x + dx;
+      const ny = current.y + dy;
+      const key = keyFor(nx, ny);
+      if (closed.has(key)) continue;
+      if (!isMochiPositionWalkable(nx, ny, blockers)) continue;
+      if (dx && dy) {
+        if (!isMochiPositionWalkable(current.x + dx, current.y, blockers)) continue;
+        if (!isMochiPositionWalkable(current.x, current.y + dy, blockers)) continue;
+      }
+
+      const g = current.g + cost;
+      const previous = best.get(key);
+      if (previous && previous.g <= g) continue;
+
+      const node = { x: nx, y: ny, g, f: g + heuristic({ x: nx, y: ny }), parent: current };
+      best.set(key, node);
+      open.push(node);
+    }
+  }
+
+  return [];
+}
+
+function findMochiInteractionTarget(item) {
+  const dims = getItemDims(item);
+  const footprint = getCollisionFootprint(item.id, item.x, item.y, dims);
+  const rect = footprint.rect;
+  const cx = rect.x + rect.w / 2;
+  const cy = rect.y + rect.h / 2;
+  const candidates = [
+    topLeftFromMochiFootCenter(cx, rect.y + rect.h + 12),
+    topLeftFromMochiFootCenter(cx, rect.y - 10),
+    topLeftFromMochiFootCenter(rect.x - 12, cy),
+    topLeftFromMochiFootCenter(rect.x + rect.w + 12, cy),
+    topLeftFromMochiFootCenter(cx - 28, rect.y + rect.h + 10),
+    topLeftFromMochiFootCenter(cx + 28, rect.y + rect.h + 10),
+  ];
+  const blockers = getMochiBlockingFootprints();
+  let best = null;
+  let bestDist = Infinity;
+
+  for (const candidate of candidates) {
+    const safe = findNearestWalkableMochiPosition(candidate.x, candidate.y, blockers, 96, {
+      preferClearance: true,
+      targetClearance: MOCHI_TARGET_CLEARANCE,
+    });
+    if (!safe) continue;
+    const path = findMochiPath(mochiX, mochiY, safe.x, safe.y, blockers);
+    const hopDist = Math.hypot(safe.x - mochiX, safe.y - mochiY);
+    if (!path.length && hopDist > MOCHI_MAX_HOP_DISTANCE) continue;
+    const clearance = getMochiClearance(safe.x, safe.y, blockers);
+    const dist = hopDist - Math.min(clearance, MOCHI_TARGET_CLEARANCE) * 0.5;
+    if (dist < bestDist) { best = safe; bestDist = dist; }
+  }
+
+  return best || findNearestWalkableMochiPosition(item.x + dims.w / 2 - MOCHI_DRAW_SIZE / 2, item.y + dims.h - MOCHI_DRAW_SIZE, blockers, 180, {
+    preferClearance: true,
+    targetClearance: MOCHI_TARGET_CLEARANCE,
+  });
+}
+
+function findRandomWalkableMochiPosition() {
+  const blockers = getMochiBlockingFootprints();
+  for (let i = 0; i < 80; i++) {
+    const point = ROOM_ZONES.floor[Math.floor(Math.random() * ROOM_ZONES.floor.length)];
+    const next = ROOM_ZONES.floor[Math.floor(Math.random() * ROOM_ZONES.floor.length)];
+    const t = Math.random();
+    const footX = point.x + (next.x - point.x) * t;
+    const footY = point.y + (next.y - point.y) * t;
+    const candidate = topLeftFromMochiFootCenter(footX, footY);
+    const safe = findNearestWalkableMochiPosition(candidate.x, candidate.y, blockers, 64, {
+      preferClearance: true,
+      targetClearance: MOCHI_TARGET_CLEARANCE,
+    });
+    if (safe) return safe;
+  }
+
+  return findNearestWalkableMochiPosition(224, 300, blockers, 220, {
+    preferClearance: true,
+    targetClearance: MOCHI_TARGET_CLEARANCE,
+  });
+}
+
+function defaultHintText() {
+  return mode === 'edit'
+    ? 'Drag items from palette · Wall items stay on walls · Floor items stay on floor'
+    : 'Click furniture for Mochi to interact · Click bowls to refill';
+}
+
+let hintTimer = null;
+function setHint(message, isWarning = false) {
+  const hint = document.getElementById('hint');
+  hint.textContent = message;
+  hint.classList.toggle('warn', isWarning);
+  clearTimeout(hintTimer);
+  if (isWarning) {
+    hintTimer = setTimeout(() => setHint(defaultHintText()), 1800);
+  }
+}
+
+function drawPolygon(ctx, points, fillStyle, strokeStyle) {
+  ctx.save();
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    if (index === 0) ctx.moveTo(point.x, point.y);
+    else ctx.lineTo(point.x, point.y);
+  });
+  ctx.closePath();
+  ctx.fillStyle = fillStyle;
+  ctx.strokeStyle = strokeStyle;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([7, 5]);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPlacementGuide(ctx, surface, valid) {
+  const fill = valid ? 'rgba(107,255,184,0.10)' : 'rgba(255,107,107,0.10)';
+  const stroke = valid ? 'rgba(107,255,184,0.65)' : 'rgba(255,107,107,0.65)';
+  if (surface === 'wall') {
+    drawPolygon(ctx, ROOM_ZONES.leftWall, fill, stroke);
+    drawPolygon(ctx, ROOM_ZONES.rightWall, fill, stroke);
+  } else {
+    drawPolygon(ctx, ROOM_ZONES.floor, fill, stroke);
+  }
+}
+
+function drawFootprint(ctx, footprint, valid) {
+  ctx.save();
+  ctx.fillStyle = valid ? 'rgba(107,255,184,0.14)' : 'rgba(255,107,107,0.18)';
+  ctx.strokeStyle = valid ? 'rgba(107,255,184,0.95)' : 'rgba(255,107,107,0.95)';
+  ctx.lineWidth = 2;
+  for (const row of footprint.rows) {
+    ctx.fillRect(row.minX, row.y, row.maxX - row.minX + 1, 1);
+  }
+
+  ctx.globalAlpha = 0.9;
+  for (const row of footprint.rows) {
+    ctx.fillRect(row.minX, row.y, 1, 1);
+    ctx.fillRect(row.maxX, row.y, 1, 1);
+  }
+  ctx.restore();
+}
 
 // ═══════ IMAGE LOADING ═══════
 const itemImgs = {};
@@ -379,14 +1595,38 @@ const ANIMS = {
   waiting: { src: SPRITES+'Waiting.png', frames:6,  speed:200 },
 };
 const mochiImgs = {};
+const mochiFrameCanvases = {};
+
+function buildMochiFrameCanvases(name, img, frames) {
+  const paddedSize = S + MOCHI_FRAME_PADDING * 2;
+  mochiFrameCanvases[name] = [];
+  for (let frame = 0; frame < frames; frame++) {
+    const canvas = document.createElement('canvas');
+    canvas.width = paddedSize;
+    canvas.height = paddedSize;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, paddedSize, paddedSize);
+    ctx.drawImage(img, frame * S, 0, S, S, MOCHI_FRAME_PADDING, MOCHI_FRAME_PADDING, S, S);
+    mochiFrameCanvases[name].push(canvas);
+  }
+}
+
 for (const [name, a] of Object.entries(ANIMS)) {
   const img = new Image();
-  img.onload = () => { mochiImgs[name] = img; };
+  img.onload = () => {
+    mochiImgs[name] = img;
+    buildMochiFrameCanvases(name, img, a.frames);
+  };
   img.src = a.src;
 }
 
-let mochiAnim = 'idle', mochiFrame = 0, mochiLastT = 0, mochiAnimCb = null;
-let mochiX = 240, mochiY = 350, mochiTargetX = null, mochiTargetY = null, mochiFlip = false, mochiMoveCb = null;
+let mochiAnim = 'waiting', mochiFrame = 0, mochiLastT = 0, mochiAnimCb = null;
+let mochiX = 240, mochiY = 350, mochiTargetX = null, mochiTargetY = null, mochiDestinationX = null, mochiDestinationY = null;
+let mochiFlip = false, mochiMoveCb = null, mochiPath = [], mochiMoveMode = 'walk';
+let mochiHopStartX = null, mochiHopStartY = null, mochiHopDistance = 1;
+let mochiLastProgressX = mochiX, mochiLastProgressY = mochiY, mochiLastProgressAt = Date.now(), mochiRecovering = false;
+let playToyX = 0, playToyY = 0, playToyInside = false, lastToyFollowAt = 0, lastToyTarget = null;
 
 // ═══════ FOOD BOWL STATE ═══════
 // Bowl fullness: stored per-room in localStorage
@@ -456,8 +1696,8 @@ function startAutoWander() {
   if (mode !== 'play') return;
 
   const wander = () => {
-    if (mode !== 'play' || mochiTargetX !== null) {
-      autoWanderTimer = setTimeout(wander, 3000);
+    if (mode !== 'play' || mochiTargetX !== null || playToyInside) {
+      autoWanderTimer = setTimeout(wander, playToyInside ? 900 : 3000);
       return;
     }
 
@@ -466,13 +1706,15 @@ function startAutoWander() {
       // Go interact with a random placed item
       const idx = Math.floor(Math.random() * items.length);
       const item = items[idx];
-      const def = CATALOG.find(f => f.id === item.id);
-      const dims = getItemDims(item);
-      const tx = item.x + dims.w/2 - S/2;
-      const ty = item.y + dims.h - S;
+      const def = getCatalogItem(item.id);
+      const target = findMochiInteractionTarget(item);
       const interact = def?.interact || 'play';
+      if (!target) {
+        autoWanderTimer = setTimeout(wander, 2500);
+        return;
+      }
 
-      mochiMoveTo(tx, ty, () => {
+      mochiMoveTo(target.x, target.y, () => {
         if (interact === 'eat' && isBowlItem(item.id)) {
           // Eat from bowl — deplete it
           const states = getBowlStates();
@@ -482,29 +1724,25 @@ function startAutoWander() {
             mochiPlay('eating', () => {
               states[key] = Math.max(0, fullness - 0.34);
               saveBowlStates(states);
-              mochiPlay('idle');
+              mochiSettle();
             });
           } else {
-            mochiPlay('waiting', () => mochiPlay('idle'));
+            mochiSettle();
           }
         } else if (interact === 'sleep') {
           mochiPlay('laydown', () => {
-            setTimeout(() => mochiPlay('idle'), 3000 + Math.random() * 4000);
+            setTimeout(() => mochiSettle(), 3000 + Math.random() * 4000);
           });
         } else if (interact === 'eat') {
-          mochiPlay('eating', () => mochiPlay('idle'));
+          mochiPlay('eating', () => mochiSettle());
         } else {
-          mochiPlay('excited', () => mochiPlay('dance'));
+          mochiPlay('dance', () => mochiSettle());
         }
       });
     } else {
       // Random walk to empty spot
-      const rx = 100 + Math.random() * 300;
-      const ry = 250 + Math.random() * 200;
-      mochiMoveTo(rx, ry, () => {
-        const idleAnims = ['idle', 'idle2', 'waiting'];
-        mochiPlay(idleAnims[Math.floor(Math.random() * idleAnims.length)]);
-      });
+      const target = findRandomWalkableMochiPosition();
+      if (target) mochiMoveTo(target.x, target.y, () => mochiSettle());
     }
 
     autoWanderTimer = setTimeout(wander, 5000 + Math.random() * 8000);
@@ -521,16 +1759,268 @@ function mochiPlay(name, cb) {
   if (!ANIMS[name]) return;
   mochiAnim = name; mochiFrame = 0; mochiLastT = 0; mochiAnimCb = cb || null;
 }
-function mochiMoveTo(tx, ty, cb) {
-  mochiTargetX = tx; mochiTargetY = ty;
-  mochiFlip = tx < mochiX;
-  mochiPlay('idle2'); mochiMoveCb = cb || null;
+
+function mochiSettle() {
+  mochiPlay('waiting');
+}
+
+function faceMochiToward(x) {
+  mochiFlip = x > mochiX + MOCHI_FOOT_CENTER.x;
+}
+
+function mochiJumpProgress() {
+  if (mochiMoveMode !== 'hop' || mochiHopStartX === null || mochiTargetX === null) return 0;
+  const remaining = Math.hypot(mochiTargetX - mochiX, mochiTargetY - mochiY);
+  return Math.max(0, Math.min(1, 1 - remaining / Math.max(1, mochiHopDistance)));
+}
+
+function getMochiMoveSpeed() {
+  if (mochiMoveMode !== 'hop') return MOCHI_SPEED;
+  return Math.min(MOCHI_HOP_SPEED, Math.max(MOCHI_SPEED, mochiHopDistance / 52));
+}
+
+function getMochiHopHeight() {
+  return Math.max(MOCHI_HOP_MIN_HEIGHT, Math.min(MOCHI_HOP_MAX_HEIGHT, 12 + mochiHopDistance * 0.13));
+}
+
+function getMochiHopScale(progress) {
+  if (mochiMoveMode !== 'hop') return { x: 1, y: 1 };
+  const air = Math.sin(progress * Math.PI);
+  const takeoff = Math.max(0, 1 - progress / 0.16);
+  const landing = Math.max(0, (progress - 0.84) / 0.16);
+  const squash = Math.max(takeoff, landing) * 0.08;
+  const stretch = air * 0.045;
+  return {
+    x: 1 + squash - stretch * 0.35,
+    y: 1 - squash + stretch,
+  };
+}
+
+function getPathDistance(start, path) {
+  let distance = 0;
+  let previous = start;
+  for (const point of path) {
+    distance += Math.hypot(point.x - previous.x, point.y - previous.y);
+    previous = point;
+  }
+  return distance;
+}
+
+function resetMochiProgressTracker() {
+  mochiLastProgressX = mochiX;
+  mochiLastProgressY = mochiY;
+  mochiLastProgressAt = Date.now();
+}
+
+function stopMochiMovement(settle = true) {
+  mochiPath = [];
+  mochiTargetX = null;
+  mochiTargetY = null;
+  mochiDestinationX = null;
+  mochiDestinationY = null;
+  mochiMoveMode = 'walk';
+  mochiHopStartX = null;
+  mochiHopStartY = null;
+  mochiHopDistance = 1;
+  mochiMoveCb = null;
+  mochiRecovering = false;
+  if (settle) mochiSettle();
+}
+
+function setNextMochiWaypoint() {
+  const next = mochiPath.shift();
+  if (!next) {
+    mochiTargetX = null;
+    mochiTargetY = null;
+    mochiDestinationX = null;
+    mochiDestinationY = null;
+    mochiMoveMode = 'walk';
+    mochiHopStartX = null;
+    mochiHopStartY = null;
+    mochiHopDistance = 1;
+    saveMochiPos();
+    if (mochiMoveCb) { const cb = mochiMoveCb; mochiMoveCb = null; cb(); }
+    else mochiSettle();
+    return;
+  }
+
+  mochiTargetX = next.x;
+  mochiTargetY = next.y;
+  mochiHopStartX = mochiMoveMode === 'hop' ? mochiX : null;
+  mochiHopStartY = mochiMoveMode === 'hop' ? mochiY : null;
+  mochiHopDistance = Math.max(1, Math.hypot(mochiTargetX - mochiX, mochiTargetY - mochiY));
+  faceMochiToward(mochiTargetX + MOCHI_FOOT_CENTER.x);
+  resetMochiProgressTracker();
+  if (mochiAnim !== 'excited') mochiPlay('excited');
+}
+
+function beginMochiMovement(path, safeTarget, cb, mode = 'walk') {
+  if (!path?.length) return false;
+  mochiDestinationX = safeTarget.x;
+  mochiDestinationY = safeTarget.y;
+  mochiPath = path;
+  mochiMoveMode = mode;
+  mochiMoveCb = cb || null;
+  mochiRecovering = false;
+  resetMochiProgressTracker();
+  setNextMochiWaypoint();
+  return true;
+}
+
+function findMochiHopLanding(goal, blockers, maxDistance = MOCHI_MAX_HOP_DISTANCE) {
+  const direct = findNearestWalkableMochiPosition(goal.x, goal.y, blockers, 96, {
+    preferClearance: true,
+    targetClearance: MOCHI_TARGET_CLEARANCE,
+  });
+  if (direct && Math.hypot(direct.x - mochiX, direct.y - mochiY) <= maxDistance) return direct;
+
+  const angle = Math.atan2(goal.y - mochiY, goal.x - mochiX);
+  const angleOffsets = [0, -0.35, 0.35, -0.7, 0.7, -1.05, 1.05];
+  let best = null;
+  let bestScore = -Infinity;
+
+  for (let distance = maxDistance; distance >= 72; distance -= MOCHI_PATH_GRID) {
+    for (const offset of angleOffsets) {
+      const candidate = {
+        x: mochiX + Math.cos(angle + offset) * distance,
+        y: mochiY + Math.sin(angle + offset) * distance,
+      };
+      const safe = findNearestWalkableMochiPosition(candidate.x, candidate.y, blockers, 48, {
+        preferClearance: true,
+        targetClearance: MOCHI_TARGET_CLEARANCE,
+      });
+      if (!safe) continue;
+      const hopDistance = Math.hypot(safe.x - mochiX, safe.y - mochiY);
+      if (hopDistance > maxDistance) continue;
+      const before = Math.hypot(goal.x - mochiX, goal.y - mochiY);
+      const after = Math.hypot(goal.x - safe.x, goal.y - safe.y);
+      const progress = before - after;
+      if (progress < 24) continue;
+      const clearance = getMochiClearance(safe.x, safe.y, blockers);
+      const score = progress + Math.min(clearance, MOCHI_TARGET_CLEARANCE) * 2 - hopDistance * 0.08;
+      if (score > bestScore) {
+        best = safe;
+        bestScore = score;
+      }
+    }
+  }
+
+  return best;
+}
+
+function recoverMochiMovement() {
+  if (mochiRecovering) return false;
+  const blockers = getMochiBlockingFootprints();
+  const destination = mochiDestinationX !== null && mochiDestinationY !== null
+    ? { x: mochiDestinationX, y: mochiDestinationY }
+    : null;
+  const cb = mochiMoveCb;
+  let safeNearby = findNearestWalkableMochiPosition(mochiX, mochiY, blockers, 180, {
+    preferClearance: true,
+    targetClearance: MOCHI_TARGET_CLEARANCE,
+    minSearchRadius: 48,
+  });
+  if (
+    destination
+    && safeNearby
+    && Math.hypot(safeNearby.x - mochiX, safeNearby.y - mochiY) < 8
+  ) {
+    safeNearby = findMochiHopLanding(destination, blockers, MOCHI_MAX_HOP_DISTANCE) || safeNearby;
+  }
+
+  if (!safeNearby) {
+    stopMochiMovement(true);
+    return false;
+  }
+
+  const started = beginMochiMovement([safeNearby], destination || safeNearby, () => {
+    mochiRecovering = false;
+    if (destination && Math.hypot(destination.x - safeNearby.x, destination.y - safeNearby.y) > 8) {
+      mochiMoveTo(destination.x, destination.y, cb, { hopAttempts: 1 });
+    } else if (cb) {
+      cb();
+    } else {
+      mochiSettle();
+    }
+  }, 'hop');
+  if (started) mochiRecovering = true;
+  return started;
+}
+
+function mochiMoveTo(tx, ty, cb, options = {}) {
+  const blockers = getMochiBlockingFootprints();
+  const safeTarget = options.safeTarget || findNearestWalkableMochiPosition(tx, ty, blockers, 180, {
+    preferClearance: true,
+    targetClearance: MOCHI_TARGET_CLEARANCE,
+  });
+  if (!safeTarget) {
+    stopMochiMovement(true);
+    return false;
+  }
+
+  if (!isMochiPositionWalkable(mochiX, mochiY, blockers)) {
+    const rescue = findNearestWalkableMochiPosition(mochiX, mochiY, blockers, 180, {
+      preferClearance: true,
+      targetClearance: MOCHI_TARGET_CLEARANCE,
+      minSearchRadius: 48,
+    });
+    if (rescue) {
+      return beginMochiMovement([rescue], safeTarget, () => mochiMoveTo(safeTarget.x, safeTarget.y, cb, { ...options, safeTarget }), 'hop');
+    }
+  }
+
+  const path = findMochiPath(mochiX, mochiY, safeTarget.x, safeTarget.y, blockers);
+  if (!path.length) {
+    const jumpDistance = Math.hypot(safeTarget.x - mochiX, safeTarget.y - mochiY);
+    const maxHopDistance = options.maxHopDistance || MOCHI_MAX_HOP_DISTANCE;
+    if (options.allowHop !== false && jumpDistance <= maxHopDistance) {
+      return beginMochiMovement([safeTarget], safeTarget, cb, 'hop');
+    }
+
+    const hopAttempts = options.hopAttempts || 0;
+    const hopLanding = options.allowHop !== false && hopAttempts < 4
+      ? findMochiHopLanding(safeTarget, blockers, maxHopDistance)
+      : null;
+    if (hopLanding) {
+      return beginMochiMovement([hopLanding], safeTarget, () => {
+        if (Math.hypot(hopLanding.x - safeTarget.x, hopLanding.y - safeTarget.y) <= 8) {
+          if (cb) cb();
+          else mochiSettle();
+        } else {
+          mochiMoveTo(safeTarget.x, safeTarget.y, cb, { ...options, safeTarget, hopAttempts: hopAttempts + 1 });
+        }
+      }, 'hop');
+    }
+
+    stopMochiMovement(true);
+    return false;
+  }
+
+  const jumpDistance = Math.hypot(safeTarget.x - mochiX, safeTarget.y - mochiY);
+  const maxHopDistance = options.maxHopDistance || MOCHI_MAX_HOP_DISTANCE;
+  const pathDistance = getPathDistance({ x: mochiX, y: mochiY }, path);
+  const directBlocked = !lineIsWalkableForMochi({ x: mochiX, y: mochiY }, safeTarget, blockers);
+  const hopWouldHelp = (
+    options.allowHop !== false
+    && directBlocked
+    && jumpDistance >= (options.minHopDistance || MOCHI_HOP_MIN_DISTANCE)
+    && jumpDistance <= maxHopDistance
+    && (options.preferHop || pathDistance > jumpDistance * MOCHI_HOP_DETOUR_RATIO)
+  );
+  if (hopWouldHelp) {
+    return beginMochiMovement([safeTarget], safeTarget, cb, 'hop');
+  }
+
+  return beginMochiMovement(path, safeTarget, cb, 'walk');
 }
 function loadMochiPos() {
   const s = localStorage.getItem('mochiPos_' + currentRoom);
   if (s) { const p = JSON.parse(s); mochiX = p.x; mochiY = p.y; }
   else { mochiX = 240; mochiY = 350; }
-  mochiTargetX = null; mochiTargetY = null;
+  mochiTargetX = null; mochiTargetY = null; mochiDestinationX = null; mochiDestinationY = null; mochiPath = [];
+  mochiMoveMode = 'walk'; mochiHopStartX = null; mochiHopStartY = null; mochiHopDistance = 1;
+  mochiRecovering = false;
+  resetMochiProgressTracker();
 }
 function saveMochiPos() {
   localStorage.setItem('mochiPos_' + currentRoom, JSON.stringify({ x: mochiX, y: mochiY }));
@@ -557,8 +2047,9 @@ function loadRoom(num) {
 }
 function loadRoomLayout() {
   const s = localStorage.getItem('roomLayout_' + currentRoom);
-  const items = s ? JSON.parse(s) : [];
-  let changed = false;
+  const loadedItems = s ? JSON.parse(s) : [];
+  const items = loadedItems.filter((item) => getCatalogItem(item.id));
+  let changed = items.length !== loadedItems.length;
   for (const item of items) {
     if (!item.instanceId) {
       ensureItemInstanceId(item);
@@ -578,14 +2069,14 @@ function getPlacedItems() { return roomLayouts[currentRoom] || []; }
 
 // Get the draw dimensions for an item
 function getItemDims(item) {
-  const def = CATALOG.find(f => f.id === item.id);
+  const def = getCatalogItem(item.id);
   if (def) return { w: def.cropW || def.w, h: def.cropH || def.h };
   return { w: 32, h: 32 };
 }
 
 // Draw a single item onto a context
 function drawItem(ctx, item, x, y) {
-  const def = CATALOG.find(f => f.id === item.id);
+  const def = getCatalogItem(item.id);
   if (def) {
     const img = itemImgs[def.src];
     if (!img) return;
@@ -597,12 +2088,108 @@ function drawItem(ctx, item, x, y) {
   }
 }
 
+function playToyCursorReady() {
+  const def = getCatalogItem(MOCHI_TOY_ID);
+  return !!(def && itemImgs[def.src]);
+}
+
+function getPlayToyCursorLayout() {
+  const def = getCatalogItem(MOCHI_TOY_ID);
+  const img = def && itemImgs[def.src];
+  if (!def || !img) return null;
+
+  const sw = def.cropW || def.w;
+  const sh = def.cropH || def.h;
+  const frameCount = def.id === 'toy-cat' && def.cropW ? Math.max(1, Math.floor(def.w / def.cropW)) : 1;
+  const frame = frameCount > 1 ? Math.floor(Date.now() / 120) % frameCount : 0;
+  const dw = sw * MOCHI_TOY_CURSOR_SCALE;
+  const dh = sh * MOCHI_TOY_CURSOR_SCALE;
+  return {
+    def,
+    img,
+    sw,
+    sh,
+    frame,
+    sx: (def.cropX || 0) + frame * sw,
+    sy: def.cropY || 0,
+    dw,
+    dh,
+    x: Math.round(playToyX - dw / 2),
+    y: Math.round(playToyY - dh / 2),
+  };
+}
+
+function getPlayToyChasePoint(cursorX = playToyX, cursorY = playToyY) {
+  const layout = getPlayToyCursorLayout();
+  if (!layout || layout.def.id !== 'toy-cat') return { x: cursorX, y: cursorY };
+  const pom = MOCHI_TOY_POM_POINTS[layout.frame] || MOCHI_TOY_POM_POINTS[0];
+  return {
+    x: cursorX - layout.dw / 2 + pom.x * MOCHI_TOY_CURSOR_SCALE,
+    y: cursorY - layout.dh / 2 + pom.y * MOCHI_TOY_CURSOR_SCALE,
+  };
+}
+
+function drawPlayToyCursor(ctx) {
+  if (mode !== 'play' || !playToyInside) return;
+  const layout = getPlayToyCursorLayout();
+  if (!layout) return;
+
+  ctx.save();
+  ctx.globalAlpha = 0.95;
+  ctx.drawImage(layout.img, layout.sx, layout.sy, layout.sw, layout.sh, layout.x, layout.y, layout.dw, layout.dh);
+  ctx.restore();
+}
+
+function requestMochiToyFollow(pos, force = false) {
+  if (mode !== 'play') return;
+  const now = Date.now();
+  const chasePoint = getPlayToyChasePoint(pos.x, pos.y);
+  const target = topLeftFromMochiFootCenter(chasePoint.x, chasePoint.y);
+  if (!force && now - lastToyFollowAt < MOCHI_TOY_FOLLOW_MS) return;
+  if (
+    !force
+    && lastToyTarget
+    && Math.hypot(lastToyTarget.x - target.x, lastToyTarget.y - target.y) < MOCHI_TOY_DEADZONE
+  ) return;
+
+  const blockers = getMochiBlockingFootprints();
+  const safeTarget = findNearestWalkableMochiPosition(target.x, target.y, blockers, 200, {
+    preferClearance: true,
+    targetClearance: MOCHI_TARGET_CLEARANCE,
+  });
+  if (!safeTarget) return;
+  if (
+    !force
+    && mochiDestinationX !== null
+    && Math.hypot(mochiDestinationX - safeTarget.x, mochiDestinationY - safeTarget.y) < MOCHI_TOY_DEADZONE
+  ) return;
+  if (
+    !force
+    && mochiMoveMode === 'hop'
+    && lastToyTarget
+    && Math.hypot(lastToyTarget.x - safeTarget.x, lastToyTarget.y - safeTarget.y) < MOCHI_TOY_DEADZONE * 2
+  ) return;
+  if (!force && mochiMoveMode === 'hop' && mochiJumpProgress() < 0.65) return;
+  if (Math.hypot(safeTarget.x - mochiX, safeTarget.y - mochiY) < 8) {
+    lastToyFollowAt = now;
+    lastToyTarget = safeTarget;
+    faceMochiToward(chasePoint.x);
+    if (mochiTargetX === null) mochiSettle();
+    return;
+  }
+
+  lastToyFollowAt = now;
+  lastToyTarget = safeTarget;
+  mochiMoveTo(safeTarget.x, safeTarget.y, () => mochiSettle(), { maxHopDistance: MOCHI_MAX_HOP_DISTANCE, safeTarget, preferHop: true });
+}
+
 // ═══════ RENDER ═══════
 let dragPreview = null;
 
 function render(t) {
   rctx.clearRect(0, 0, 512, 512);
   if (roomBgImg) rctx.drawImage(roomBgImg, 0, 0, 512, 512);
+  if (dragPreview) drawPlacementGuide(rctx, dragPreview.surface, dragPreview.valid);
 
   const drawables = [];
 
@@ -613,7 +2200,11 @@ function render(t) {
     const item = placedItems[i];
     const dims = getItemDims(item);
     const bowlKey = getBowlStateKey(item, i);
-    drawables.push({ y: item.y + dims.h, draw: () => {
+    const sortFootprint = getPlacementSurface(item.id) === 'floor'
+      ? getCollisionFootprint(item.id, item.x, item.y, dims)
+      : null;
+    const sortY = sortFootprint ? sortFootprint.rect.y + sortFootprint.rect.h : item.y + dims.h;
+    drawables.push({ y: sortY, draw: () => {
       drawItem(rctx, item, item.x, item.y);
       // Draw bowl fullness indicator
       if (isBowlItem(item.id)) {
@@ -634,15 +2225,47 @@ function render(t) {
   if (mochiTargetX !== null) {
     const dx = mochiTargetX - mochiX, dy = mochiTargetY - mochiY;
     const dist = Math.hypot(dx, dy);
-    if (dist < 3) {
+    const moveSpeed = getMochiMoveSpeed();
+    if (dist <= moveSpeed) {
       mochiX = mochiTargetX; mochiY = mochiTargetY;
-      mochiTargetX = null; mochiTargetY = null;
-      saveMochiPos();
-      if (mochiMoveCb) { const cb = mochiMoveCb; mochiMoveCb = null; cb(); }
-      else mochiPlay('idle');
+      setNextMochiWaypoint();
     } else {
-      mochiX += (dx / dist) * 2;
-      mochiY += (dy / dist) * 2;
+      const nextX = mochiX + (dx / dist) * moveSpeed;
+      const nextY = mochiY + (dy / dist) * moveSpeed;
+      if (mochiMoveMode === 'hop' || isMochiPositionWalkable(nextX, nextY)) {
+        mochiX = nextX;
+        mochiY = nextY;
+        faceMochiToward(mochiTargetX + MOCHI_FOOT_CENTER.x);
+        if (mochiAnim !== 'excited') mochiPlay('excited');
+      } else {
+        const blockers = getMochiBlockingFootprints();
+        const destination = { x: mochiDestinationX ?? mochiTargetX, y: mochiDestinationY ?? mochiTargetY };
+        const path = findMochiPath(mochiX, mochiY, destination.x, destination.y, blockers);
+        if (path.length) {
+          beginMochiMovement(path, destination, mochiMoveCb, 'walk');
+        } else {
+          const safeTarget = findNearestWalkableMochiPosition(destination.x, destination.y, blockers, 180, {
+            preferClearance: true,
+            targetClearance: MOCHI_TARGET_CLEARANCE,
+          });
+          if (safeTarget && Math.hypot(safeTarget.x - mochiX, safeTarget.y - mochiY) <= MOCHI_MAX_HOP_DISTANCE) {
+            beginMochiMovement([safeTarget], safeTarget, mochiMoveCb, 'hop');
+          } else if (!recoverMochiMovement()) {
+            stopMochiMovement(true);
+          } else {
+            resetMochiProgressTracker();
+          }
+        }
+      }
+    }
+
+    if (mochiTargetX !== null) {
+      const movedSinceLastCheck = Math.hypot(mochiX - mochiLastProgressX, mochiY - mochiLastProgressY);
+      if (movedSinceLastCheck >= MOCHI_PROGRESS_EPSILON) {
+        resetMochiProgressTracker();
+      } else if (Date.now() - mochiLastProgressAt > MOCHI_STUCK_MS) {
+        recoverMochiMovement();
+      }
     }
   }
 
@@ -651,22 +2274,50 @@ function render(t) {
   if (ad && ai && t - mochiLastT >= ad.speed) {
     mochiLastT = t;
     if (mochiFrame >= ad.frames) {
-      if (ad.once && mochiAnimCb) { const cb = mochiAnimCb; mochiAnimCb = null; cb(); }
+      if (mochiAnimCb) { const cb = mochiAnimCb; mochiAnimCb = null; cb(); }
       mochiFrame = 0;
     }
     mochiFrame++;
   }
 
-  const MOCHI_DRAW = 64; // Draw Mochi bigger than 32px source
   const mf = Math.max(0, Math.min((mochiFrame || 1) - 1, (ANIMS[mochiAnim]?.frames || 1) - 1));
-  drawables.push({ y: mochiY + MOCHI_DRAW, draw: () => {
+  const hopProgress = mochiJumpProgress();
+  const jumpOffset = mochiMoveMode === 'hop'
+    ? Math.sin(hopProgress * Math.PI) * getMochiHopHeight()
+    : 0;
+  const hopScale = getMochiHopScale(hopProgress);
+  const mochiSortFootprint = getMochiFootprintAt(mochiX, mochiY, mochiFlip);
+  const mochiSortY = mochiSortFootprint ? mochiSortFootprint.rect.y + mochiSortFootprint.rect.h : mochiY + MOCHI_FOOT_CENTER.y;
+  drawables.push({ y: mochiSortY, draw: () => {
     rctx.save();
+    rctx.imageSmoothingEnabled = false;
+    const frameCanvas = mochiFrameCanvases[mochiAnim]?.[mf];
+    const padScale = MOCHI_DRAW_SIZE / S;
+    const frameInset = MOCHI_FRAME_PADDING * padScale;
+    const frameDrawSize = MOCHI_DRAW_SIZE + frameInset * 2;
+    const baseX = Math.round(mochiX - frameInset);
+    const baseY = Math.round(mochiY - jumpOffset - frameInset);
+    const drawW = frameDrawSize * hopScale.x;
+    const drawH = frameDrawSize * hopScale.y;
+    const drawX = Math.round(baseX - (drawW - frameDrawSize) / 2);
+    const drawY = Math.round(baseY + frameDrawSize - drawH);
+    if (mochiMoveMode === 'hop') {
+      const shadowWidth = Math.max(18, 34 - Math.sin(hopProgress * Math.PI) * 10);
+      const shadowX = Math.round(mochiX + MOCHI_FOOT_CENTER.x - shadowWidth / 2);
+      const shadowY = Math.round(mochiY + MOCHI_FOOT_CENTER.y + 4);
+      rctx.fillStyle = `rgba(26, 23, 31, ${0.18 - Math.sin(hopProgress * Math.PI) * 0.06})`;
+      rctx.beginPath();
+      rctx.ellipse(shadowX + shadowWidth / 2, shadowY, shadowWidth / 2, 4, 0, 0, Math.PI * 2);
+      rctx.fill();
+    }
     if (mochiFlip) {
-      rctx.translate(mochiX + MOCHI_DRAW, mochiY);
+      rctx.translate(drawX + drawW, drawY);
       rctx.scale(-1, 1);
-      if (ai) rctx.drawImage(ai, mf * S, 0, S, S, 0, 0, MOCHI_DRAW, MOCHI_DRAW);
+      if (frameCanvas) rctx.drawImage(frameCanvas, 0, 0, drawW, drawH);
+      else if (ai) rctx.drawImage(ai, mf * S, 0, S, S, frameInset, frameInset, MOCHI_DRAW_SIZE * hopScale.x, MOCHI_DRAW_SIZE * hopScale.y);
     } else {
-      if (ai) rctx.drawImage(ai, mf * S, 0, S, S, mochiX, mochiY, MOCHI_DRAW, MOCHI_DRAW);
+      if (frameCanvas) rctx.drawImage(frameCanvas, drawX, drawY, drawW, drawH);
+      else if (ai) rctx.drawImage(ai, mf * S, 0, S, S, drawX + frameInset, drawY + frameInset, MOCHI_DRAW_SIZE * hopScale.x, MOCHI_DRAW_SIZE * hopScale.y);
     }
     rctx.restore();
   }});
@@ -674,12 +2325,31 @@ function render(t) {
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 
+  if (mode === 'edit' && !dragPreview) {
+    for (let i = 0; i < placedItems.length; i++) {
+      const item = placedItems[i];
+      const dims = getItemDims(item);
+      const placement = validatePlacement(item.id, item.x, item.y, dims, { ignoreIndex: i });
+      if (!placement.valid) {
+        drawFootprint(rctx, getPreviewFootprint(item.id, item.x, item.y, dims), false);
+      }
+    }
+  }
+
   // Drag preview
   if (dragPreview) {
-    rctx.globalAlpha = 0.5;
-    drawItem(rctx, dragPreview, dragPreview.x - (dragPreview.dw||16)/2, dragPreview.y - (dragPreview.dh||16)/2);
-    rctx.globalAlpha = 1;
+    const dw = dragPreview.dw || 16;
+    const dh = dragPreview.dh || 16;
+    const px = dragPreview.x - dw / 2;
+    const py = dragPreview.y - dh / 2;
+    rctx.save();
+    rctx.globalAlpha = dragPreview.valid ? 0.65 : 0.35;
+    drawItem(rctx, dragPreview, px, py);
+    rctx.restore();
+    drawFootprint(rctx, getPreviewFootprint(dragPreview.id, px, py, { w: dw, h: dh }), dragPreview.valid);
   }
+
+  drawPlayToyCursor(rctx);
 
   requestAnimationFrame(render);
 }
@@ -788,19 +2458,79 @@ function canvasCoords(e) {
   return { x, y, inside: x >= 0 && x <= 512 && y >= 0 && y <= 512 };
 }
 
+roomCanvas.addEventListener('mousemove', (e) => {
+  if (mode !== 'play' || dragging) return;
+  const pos = canvasCoords(e);
+  playToyInside = pos.inside;
+  if (!pos.inside) {
+    roomCanvas.style.cursor = 'pointer';
+    return;
+  }
+
+  playToyX = pos.x;
+  playToyY = pos.y;
+  roomCanvas.style.cursor = playToyCursorReady() ? 'none' : 'pointer';
+  requestMochiToyFollow(pos);
+});
+
+roomCanvas.addEventListener('mouseenter', (e) => {
+  if (mode !== 'play' || dragging) return;
+  const pos = canvasCoords(e);
+  playToyInside = pos.inside;
+  if (pos.inside) {
+    playToyX = pos.x;
+    playToyY = pos.y;
+    roomCanvas.style.cursor = playToyCursorReady() ? 'none' : 'pointer';
+    requestMochiToyFollow(pos, true);
+  }
+});
+
+roomCanvas.addEventListener('mouseleave', () => {
+  playToyInside = false;
+  lastToyTarget = null;
+  roomCanvas.style.cursor = mode === 'edit' ? 'crosshair' : 'pointer';
+});
+
 function startDrag(itemData, e) {
-  dragging = { ...itemData, fromPalette: true };
+  dragging = {
+    ...itemData,
+    fromPalette: true,
+    offsetX: (itemData.dw || 32) / 2,
+    offsetY: (itemData.dh || 32) / 2,
+  };
   dragExistingIdx = -1;
   e.preventDefault();
+}
+
+function getDragTopLeft(drag, pos) {
+  const dw = drag.dw || 32, dh = drag.dh || 32;
+  return {
+    x: Math.round(pos.x - (drag.offsetX ?? dw / 2)),
+    y: Math.round(pos.y - (drag.offsetY ?? dh / 2)),
+    w: dw,
+    h: dh,
+  };
 }
 
 document.addEventListener('mousemove', (e) => {
   if (!dragging) return;
   const pos = canvasCoords(e);
   if (pos.inside) {
-    dragPreview = { ...dragging, x: pos.x, y: pos.y };
+    const topLeft = getDragTopLeft(dragging, pos);
+    const placement = validatePlacement(dragging.id, topLeft.x, topLeft.y, { w: topLeft.w, h: topLeft.h }, {
+      ignoreIndex: dragExistingIdx,
+    });
+    dragPreview = {
+      ...dragging,
+      x: topLeft.x + topLeft.w / 2,
+      y: topLeft.y + topLeft.h / 2,
+      valid: placement.valid,
+      surface: placement.surface,
+    };
+    roomCanvas.style.cursor = placement.valid ? 'copy' : 'not-allowed';
   } else {
     dragPreview = null;
+    roomCanvas.style.cursor = 'not-allowed';
   }
 });
 
@@ -809,11 +2539,16 @@ document.addEventListener('mouseup', (e) => {
   const pos = canvasCoords(e);
 
   if (pos.inside) {
-    const dw = dragging.dw || 32, dh = dragging.dh || 32;
-    const px = Math.round(pos.x - dw / 2);
-    const py = Math.round(pos.y - dh / 2);
+    const topLeft = getDragTopLeft(dragging, pos);
+    const px = topLeft.x;
+    const py = topLeft.y;
+    const placement = validatePlacement(dragging.id, px, py, { w: topLeft.w, h: topLeft.h }, {
+      ignoreIndex: dragExistingIdx,
+    });
 
-    if (dragExistingIdx >= 0) {
+    if (!placement.valid) {
+      setHint(placement.message, true);
+    } else if (dragExistingIdx >= 0) {
       const items = getPlacedItems();
       items[dragExistingIdx].x = px;
       items[dragExistingIdx].y = py;
@@ -828,6 +2563,7 @@ document.addEventListener('mouseup', (e) => {
   dragging = null;
   dragPreview = null;
   dragExistingIdx = -1;
+  roomCanvas.style.cursor = mode === 'edit' ? 'crosshair' : (playToyInside ? 'none' : 'pointer');
 });
 
 // ═══════ ROOM CANVAS INTERACTION ═══════
@@ -841,11 +2577,15 @@ roomCanvas.addEventListener('click', (e) => {
     const items = getPlacedItems();
     for (let i = items.length - 1; i >= 0; i--) {
       const item = items[i];
-      const def = CATALOG.find(f => f.id === item.id);
+      const def = getCatalogItem(item.id);
       const dims = getItemDims(item);
       if (pos.x >= item.x && pos.x <= item.x + dims.w && pos.y >= item.y && pos.y <= item.y + dims.h) {
-        const tx = item.x + dims.w/2 - S/2, ty = item.y + dims.h - S;
+        const target = findMochiInteractionTarget(item);
         const interact = def?.interact || 'play';
+        if (!target) {
+          mochiSettle();
+          return;
+        }
 
         // Bowl: click to refill if empty, otherwise Mochi goes to eat
         if (isBowlItem(item.id)) {
@@ -859,31 +2599,31 @@ roomCanvas.addEventListener('click', (e) => {
             return;
           }
           // Mochi walks over and eats
-          mochiMoveTo(tx, ty, () => {
+          mochiMoveTo(target.x, target.y, () => {
             const st = getBowlStates();
             const f = st[key] !== undefined ? st[key] : 1;
             if (f > 0) {
               mochiPlay('eating', () => {
                 st[key] = Math.max(0, f - 0.34);
                 saveBowlStates(st);
-                mochiPlay('idle');
+                mochiSettle();
               });
             } else {
-              mochiPlay('waiting', () => mochiPlay('idle'));
+              mochiSettle();
             }
           });
           return;
         }
 
-        mochiMoveTo(tx, ty, () => {
+        mochiMoveTo(target.x, target.y, () => {
           if (interact === 'sleep') mochiPlay('laydown', () => mochiPlay('sleep'));
-          else if (interact === 'eat') mochiPlay('eating', () => mochiPlay('idle'));
-          else mochiPlay('excited', () => mochiPlay('dance'));
+          else if (interact === 'eat') mochiPlay('eating', () => mochiSettle());
+          else mochiPlay('dance', () => mochiSettle());
         });
         return;
       }
     }
-    mochiMoveTo(pos.x - S/2, pos.y - S, null);
+    mochiMoveTo(pos.x - MOCHI_DRAW_SIZE / 2, pos.y - MOCHI_FOOT_CENTER.y, () => mochiSettle());
   }
 });
 
@@ -898,9 +2638,23 @@ roomCanvas.addEventListener('mousedown', (e) => {
     const item = items[i];
     const dims = getItemDims(item);
     if (pos.x >= item.x && pos.x <= item.x + dims.w && pos.y >= item.y && pos.y <= item.y + dims.h) {
-      dragging = { id: item.id, dw: dims.w, dh: dims.h, fromPalette: false };
+      dragging = {
+        id: item.id,
+        dw: dims.w,
+        dh: dims.h,
+        fromPalette: false,
+        offsetX: pos.x - item.x,
+        offsetY: pos.y - item.y,
+      };
       dragExistingIdx = i;
-      dragPreview = { ...dragging, x: pos.x, y: pos.y };
+      const placement = validatePlacement(item.id, item.x, item.y, dims, { ignoreIndex: i });
+      dragPreview = {
+        ...dragging,
+        x: item.x + dims.w / 2,
+        y: item.y + dims.h / 2,
+        valid: placement.valid,
+        surface: placement.surface,
+      };
       e.preventDefault();
       return;
     }
@@ -923,17 +2677,32 @@ roomCanvas.addEventListener('contextmenu', (e) => {
 });
 
 // ═══════ MODE TOGGLE ═══════
+function setRoomMode(nextMode) {
+  if (nextMode !== 'edit' && nextMode !== 'play') return;
+  mode = nextMode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  setHint(defaultHintText());
+  playToyInside = false;
+  lastToyTarget = null;
+  roomCanvas.style.cursor = mode === 'edit' ? 'crosshair' : 'pointer';
+  if (mode === 'play') {
+    if (mochiTargetX === null) mochiSettle();
+    startAutoWander();
+  } else {
+    stopAutoWander();
+    mochiPath = [];
+    mochiTargetX = null;
+    mochiTargetY = null;
+    mochiDestinationX = null;
+    mochiDestinationY = null;
+    mochiMoveMode = 'walk';
+    mochiMoveCb = null;
+    mochiPlay('idle');
+  }
+}
+
 document.querySelectorAll('.mode-btn').forEach(btn => {
-  btn.onclick = () => {
-    mode = btn.dataset.mode;
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-    document.getElementById('hint').textContent = mode === 'edit'
-      ? 'Drag items from palette · Right-click placed items to remove'
-      : 'Click furniture for Mochi to interact · Click bowls to refill';
-    roomCanvas.style.cursor = mode === 'edit' ? 'crosshair' : 'pointer';
-    if (mode === 'play') startAutoWander();
-    else stopAutoWander();
-  };
+  btn.onclick = () => setRoomMode(btn.dataset.mode);
 });
 
 // ═══════ INIT ═══════
@@ -942,6 +2711,8 @@ setupPalette();
 loadRoom(currentRoom);
 loadMochiPos();
 mochiPlay('idle');
+setRoomMode(new URLSearchParams(window.location.search).get('mode') || 'edit');
+window.electronAPI?.onSetRoomMode?.(setRoomMode);
 requestAnimationFrame(render);
 </script>
 </body>

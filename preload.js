@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   quit: () => ipcRenderer.send('quit-app'),
   notify: (title, body) => ipcRenderer.send('notify', { title, body }),
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
-  openRoom: () => ipcRenderer.send('open-room'),
+  openRoom: (mode) => ipcRenderer.send('open-room', mode),
   toggleFollow: (enabled) => ipcRenderer.send('toggle-follow', enabled),
   hideMochi: () => ipcRenderer.send('hide-mochi'),
   onStopFollow: (cb) => ipcRenderer.on('stop-follow', cb),
