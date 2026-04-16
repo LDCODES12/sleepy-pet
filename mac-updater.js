@@ -166,6 +166,7 @@ NEW_APP="$2"
 TARGET_APP="$3"
 LOG_PATH="$4"
 BACKUP_APP="\${TARGET_APP}.previous-update"
+UPDATE_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 {
   echo "[$(date)] Waiting for Sleepy Pet process \${APP_PID} to exit"
@@ -206,6 +207,7 @@ BACKUP_APP="\${TARGET_APP}.previous-update"
   fi
   rm -rf "\${BACKUP_APP}"
   echo "[$(date)] Installed Sleepy Pet update"
+  rm -rf "\${UPDATE_ROOT}" || true
 } >> "\${LOG_PATH}" 2>&1
 `;
 }

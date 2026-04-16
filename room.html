@@ -6,9 +6,9 @@
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, sans-serif;
-      background: #1a1428;
-      color: #ede6f8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      background: #f2e3bf;
+      color: #4b3528;
       display: flex;
       flex-direction: column;
       height: 100vh;
@@ -21,44 +21,74 @@
       display: flex;
       gap: 6px;
       padding: 8px 12px;
-      background: rgba(0,0,0,0.3);
+      background: #f7e5bd;
+      border-bottom: 2px solid #8f6d4d;
       overflow-x: auto;
       flex-shrink: 0;
       align-items: center;
+      box-shadow: inset 0 -3px 0 #fff2cf;
     }
+    .room-picker::-webkit-scrollbar { height: 7px; }
+    .room-picker::-webkit-scrollbar-thumb { background: #b08a64; border-radius: 0; }
     .room-picker-label {
-      font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
-      color: rgba(255,255,255,0.3); margin-right: 4px; flex-shrink: 0;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #8f6d4d;
+      margin-right: 4px;
+      flex-shrink: 0;
+      font-weight: 900;
     }
     .room-thumb {
       width: 48px; height: 48px;
-      border-radius: 6px;
-      border: 2px solid transparent;
+      border-radius: 8px;
+      border: 1px solid #b99f77;
+      background: #f2e2bc;
       cursor: pointer;
       image-rendering: pixelated;
       flex-shrink: 0;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, transform 0.12s, background-color 0.15s;
     }
-    .room-thumb:hover { border-color: rgba(180,160,240,0.4); }
-    .room-thumb.active { border-color: #6C5CE7; }
+    .room-thumb:hover {
+      border-color: #8f6d4d;
+      transform: translateY(-1px);
+      background: #fff2cf;
+    }
+    .room-thumb.active {
+      border-color: #8a73d9;
+      box-shadow: 0 0 0 2px #dfd4fa;
+      background: #fdf5df;
+    }
 
     /* ── Main area ── */
-    .main-area { display: flex; flex: 1; min-height: 0; }
+    .main-area {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      background: #ead7af;
+    }
 
     /* ── Palette sidebar ── */
     .palette {
       width: 240px;
-      background: rgba(0,0,0,0.2);
-      border-right: 1px solid rgba(255,255,255,0.08);
+      background: #f7e5bd;
+      border-right: 2px solid #8f6d4d;
       overflow-y: auto;
       flex-shrink: 0;
-      padding: 8px 10px;
+      padding: 8px 10px 10px;
+      box-shadow: inset -3px 0 0 #fff2cf;
     }
     .palette::-webkit-scrollbar { width: 6px; }
-    .palette::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    .palette::-webkit-scrollbar-thumb { background: #b08a64; border-radius: 0; }
     .pal-cat {
-      font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
-      color: rgba(255,255,255,0.35); margin: 12px 0 6px; cursor: pointer;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #8f6d4d;
+      margin: 12px 0 6px;
+      cursor: pointer;
+      font-weight: 900;
+      user-select: none;
     }
     .pal-cat:first-child { margin-top: 4px; }
     .pal-cat::before { content: '▸ '; font-size: 8px; }
@@ -70,29 +100,43 @@
     }
     .pal-grid.hidden { display: none; }
     .pal-item {
-      aspect-ratio: 1;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 6px;
+      min-height: 74px;
+      background: #f2e2bc;
+      border: 1px solid #c2ae86;
+      border-radius: 8px;
       cursor: grab;
-      display: flex;
+      display: grid;
+      grid-template-rows: 58px 10px;
       align-items: center;
-      justify-content: center;
-      padding: 4px;
-      transition: background 0.15s, border-color 0.15s;
+      justify-items: center;
+      padding: 3px 3px 2px;
+      transition: background 0.15s, border-color 0.15s, transform 0.12s;
       position: relative;
     }
-    .pal-item:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.15); }
+    .pal-item:hover {
+      background: #fff2cf;
+      border-color: #8f6d4d;
+      transform: translateY(-1px);
+    }
     .pal-item:active { cursor: grabbing; }
     .pal-item canvas {
-      width: 100%; height: 100%;
+      width: 58px;
+      height: 58px;
       image-rendering: pixelated;
+      flex: 0 0 auto;
+      margin-top: 0;
     }
     .pal-item-label {
-      position: absolute; bottom: 1px; left: 0; right: 0;
-      font-size: 7px; text-align: center; color: rgba(255,255,255,0.4);
+      position: static;
+      font-size: 7px;
+      text-align: center;
+      color: #8f6d4d;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      width: 100%;
       padding: 0 2px;
+      font-weight: 900;
+      text-shadow: 0 1px 0 rgba(255, 242, 207, 0.7);
+      line-height: 1;
     }
 
     /* ── Room canvas area ── */
@@ -103,10 +147,16 @@
       justify-content: center;
       padding: 12px;
       position: relative;
+      background: #ead7af;
     }
     #room-canvas {
       image-rendering: pixelated;
-      border-radius: 8px;
+      border-radius: 10px;
+      border: 2px solid #5c4634;
+      box-shadow:
+        0 0 0 2px #8f6d4d,
+        0 0 0 4px #fff2cf,
+        4px 5px 0 rgba(45, 37, 36, 0.45);
       cursor: crosshair;
       max-width: 100%;
       max-height: 100%;
@@ -118,22 +168,71 @@
       align-items: center;
       justify-content: space-between;
       padding: 8px 14px;
-      background: rgba(0,0,0,0.3);
+      background: #f7e5bd;
+      border-top: 2px solid #8f6d4d;
+      box-shadow: inset 0 2px 0 #fff2cf;
       flex-shrink: 0;
     }
     .mode-toggle { display: flex; gap: 4px; }
     .mode-btn {
-      padding: 5px 14px;
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 8px;
-      background: rgba(255,255,255,0.05);
-      color: #ede6f8; font-size: 11px; font-weight: 600;
-      cursor: pointer; transition: background 0.15s;
+      min-width: 66px;
+      height: 26px;
+      padding: 0 12px 2px;
+      border: 0;
+      border-radius: 0;
+      background: #f7e5bd;
+      color: #4b3528;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.2px;
+      cursor: pointer;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #5c4634,
+        inset 0 0 0 3px #8f6d4d,
+        inset 0 0 0 5px #fff2cf,
+        2px 2px 0 #2d2524;
+      transition: transform 90ms ease, background-color 90ms ease, box-shadow 90ms ease;
     }
-    .mode-btn:hover { background: rgba(255,255,255,0.1); }
-    .mode-btn.active { background: rgba(108,92,231,0.4); border-color: rgba(108,92,231,0.5); }
-    .hint { font-size: 10px; color: rgba(255,255,255,0.3); transition: color 0.15s; }
-    .hint.warn { color: #ffb4a9; }
+    .mode-btn:hover {
+      background: #fff2cf;
+      transform: translateY(-1px);
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #5c4634,
+        inset 0 0 0 3px #8f6d4d,
+        inset 0 0 0 5px #fff7df,
+        2px 3px 0 #2d2524;
+    }
+    .mode-btn:active {
+      background: #d6c08b;
+      transform: translate(1px, 1px);
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #5c4634,
+        inset 0 0 0 3px #5c4634,
+        inset 0 0 0 5px #d2b27e,
+        1px 1px 0 #2d2524;
+    }
+    .mode-btn.active {
+      background: #dfd4fa;
+      color: #41305e;
+      box-shadow:
+        0 0 0 1px #4f3d79,
+        0 0 0 2px #8a73d9,
+        inset 0 0 0 3px #b9a8ef,
+        inset 0 0 0 5px #efe8ff,
+        2px 2px 0 #4f3d79;
+    }
+    .hint {
+      font-size: 9px;
+      color: #8f6d4d;
+      transition: color 0.15s;
+      font-weight: 900;
+      letter-spacing: 0.4px;
+      text-align: right;
+    }
+    .hint.warn { color: #b24f45; }
 
     /* ── Drag ghost ── */
     .drag-ghost {
@@ -2377,6 +2476,23 @@ function setupRoomPicker() {
 }
 
 // ═══════ PALETTE ═══════
+const thumbSourceRectCache = new Map();
+
+function getThumbSourceRect(_img, item) {
+  const cacheKey = item.id;
+  if (thumbSourceRectCache.has(cacheKey)) return thumbSourceRectCache.get(cacheKey);
+
+  const rect = {
+    sx: item.cropX || 0,
+    sy: item.cropY || 0,
+    sw: item.cropW || item.w,
+    sh: item.cropH || item.h,
+  };
+
+  thumbSourceRectCache.set(cacheKey, rect);
+  return rect;
+}
+
 function setupPalette() {
   const palette = document.getElementById('palette');
 
@@ -2408,7 +2524,7 @@ function setupPalette() {
       el.title = item.name;
 
       const thumb = document.createElement('canvas');
-      thumb.width = 56; thumb.height = 56;
+      thumb.width = 64; thumb.height = 64;
       el.appendChild(thumb);
 
       const lbl = document.createElement('div');
@@ -2422,12 +2538,17 @@ function setupPalette() {
         if (!img) return false;
         const tc = thumb.getContext('2d');
         tc.imageSmoothingEnabled = false;
-        tc.clearRect(0, 0, 56, 56);
-        const sx = item.cropX || 0, sy = item.cropY || 0;
-        const sw = item.cropW || item.w, sh = item.cropH || item.h;
-        const scale = Math.min(52 / sw, 52 / sh);
-        const dw = sw * scale, dh = sh * scale;
-        tc.drawImage(img, sx, sy, sw, sh, (56-dw)/2, (56-dh)/2, dw, dh);
+        tc.webkitImageSmoothingEnabled = false;
+        tc.mozImageSmoothingEnabled = false;
+        tc.msImageSmoothingEnabled = false;
+        tc.clearRect(0, 0, 64, 64);
+        const src = getThumbSourceRect(img, item);
+        const scale = Math.min(58 / src.sw, 58 / src.sh);
+        const dw = Math.max(1, Math.round(src.sw * scale));
+        const dh = Math.max(1, Math.round(src.sh * scale));
+        const dx = Math.floor((64 - dw) / 2);
+        const dy = Math.floor((64 - dh) / 2);
+        tc.drawImage(img, src.sx, src.sy, src.sw, src.sh, dx, dy, dw, dh);
         return true;
       };
       if (!tryDraw()) {

@@ -17,6 +17,12 @@
       cursor: pointer;
       background: transparent;
     }
+    #cat-canvas.follow-mode {
+      top: 0;
+      left: 0;
+      right: auto;
+      bottom: auto;
+    }
 
     /* ── Mini room view ── */
     #room-view-wrap {
@@ -40,21 +46,49 @@
     /* ── Speech bubble ── */
     .bubble {
       position: absolute; top: 0; left: 0;
-      background: rgba(35, 28, 50, 0.92);
-      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 10px; padding: 5px 10px;
-      font-size: 11px; color: #ede6f8; white-space: nowrap;
+      background: #f7e5bd;
+      border: 0;
+      border-radius: 0;
+      padding: 4px 10px 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.2px;
+      line-height: 1.15;
+      color: #4b3528;
+      white-space: nowrap;
       opacity: 0; transition: opacity 0.3s;
       pointer-events: none;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #5c4634,
+        inset 0 0 0 3px #8f6d4d,
+        inset 0 0 0 5px #fff2cf,
+        2px 2px 0 rgba(45, 37, 36, 0.7);
+      text-shadow: 0 1px 0 rgba(255, 246, 224, 0.9);
       --bubble-tail-left: 50%;
     }
     .bubble.show { opacity: 1; }
     .bubble::after {
-      content: ''; position: absolute; bottom: -5px; left: var(--bubble-tail-left);
+      content: '';
+      position: absolute;
+      bottom: -7px;
+      left: var(--bubble-tail-left);
       transform: translateX(-50%);
-      border-left: 5px solid transparent; border-right: 5px solid transparent;
-      border-top: 5px solid rgba(35, 28, 50, 0.92);
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 7px solid #5c4634;
+    }
+    .bubble::before {
+      content: '';
+      position: absolute;
+      bottom: -6px;
+      left: var(--bubble-tail-left);
+      transform: translateX(-50%);
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid #f7e5bd;
+      z-index: 1;
     }
 
     /* ── Menu ── */
@@ -132,6 +166,35 @@
     .menu-btn:focus-visible {
       outline: 2px solid #fff7df;
       outline-offset: 3px;
+    }
+    .menu-btn.hidden { display: none; }
+    .menu-btn.update-btn {
+      background: #dfd4fa;
+      color: #41305e;
+      box-shadow:
+        0 0 0 1px #4f3d79,
+        0 0 0 2px #8a73d9,
+        inset 0 0 0 3px #b9a8ef,
+        inset 0 0 0 5px #efe8ff,
+        2px 2px 0 #4f3d79;
+    }
+    .menu-btn.update-btn:hover {
+      background: #efe8ff;
+      box-shadow:
+        0 0 0 1px #4f3d79,
+        0 0 0 2px #8a73d9,
+        inset 0 0 0 3px #b9a8ef,
+        inset 0 0 0 5px #f7f1ff,
+        2px 3px 0 #4f3d79;
+    }
+    .menu-btn.update-btn:active {
+      background: #cbb8ef;
+      box-shadow:
+        0 0 0 1px #4f3d79,
+        0 0 0 2px #8a73d9,
+        inset 0 0 0 3px #8a73d9,
+        inset 0 0 0 5px #c3b0ea,
+        1px 1px 0 #4f3d79;
     }
 
     /* ── Panel shared ── */
@@ -258,29 +321,54 @@
     #inv-panel { width: 220px; }
     .inv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
     .inv-item {
-      aspect-ratio: 1; border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 8px; background: rgba(255,255,255,0.05);
+      aspect-ratio: 1;
+      border: 1px solid #c2ae86;
+      border-radius: 8px;
+      background: #f2e2bc;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
       overflow: hidden; transition: border-color 0.2s;
     }
-    .inv-item:hover { background: rgba(255,255,255,0.1); }
-    .inv-item.sel { border-color: rgba(108,92,231,0.6); background: rgba(108,92,231,0.2); }
+    .inv-item:hover { background: #f9edcf; }
+    .inv-item.sel { border-color: #8a73d9; background: #dfd4fa; }
     .inv-item canvas { width: 100%; height: 100%; image-rendering: pixelated; }
-    .inv-item.locked { opacity: 0.35; cursor: default; position: relative; }
-    .inv-item.locked:hover { background: rgba(255,255,255,0.05); }
+    .inv-item.locked { opacity: 0.7; cursor: default; position: relative; }
+    .inv-item.locked:hover { background: #f2e2bc; }
     .inv-lock {
       position: absolute; inset: 0;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      font-family: monospace; font-size: 8px;
-      color: rgba(255,200,100,0.8); text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 8px;
+      font-weight: 900;
+      color: #f8efdc;
+      text-shadow: 0 1px 0 rgba(24, 18, 16, 0.7);
+      text-align: center;
       line-height: 1.3; pointer-events: none;
+      background: rgba(66, 49, 37, 0.36);
     }
     .inv-lock-icon { font-size: 14px; }
-    .inv-section { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: rgba(255,255,255,0.35); margin-top: 10px; margin-bottom: 4px; }
+    .inv-section {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #8f6d4d;
+      margin-top: 10px;
+      margin-bottom: 4px;
+      font-weight: 900;
+    }
     .inv-section:first-child { margin-top: 0; }
-    .inv-none { font-size: 9px; color: rgba(255,255,255,0.3); font-weight: 600; }
-    .inv-preview { width: 64px; height: 64px; image-rendering: pixelated; margin: 0 auto 8px; display: block; border-radius: 8px; background: rgba(255,255,255,0.05); }
+    .inv-none {
+      font-size: 9px;
+      color: #6f5643;
+      font-weight: 900;
+      letter-spacing: 0.1px;
+    }
+    .inv-preview {
+      width: 64px; height: 64px; image-rendering: pixelated; margin: 0 auto 8px; display: block;
+      border-radius: 8px;
+      background: #f2e2bc;
+      border: 1px solid #c2ae86;
+    }
   </style>
 </head>
 <body>
@@ -300,6 +388,7 @@
     <button class="menu-btn" data-action="inv">Inventory</button>
     <button class="menu-btn" data-action="follow" id="follow-btn">Follow Mouse</button>
     <button class="menu-btn" data-action="hide">Hide Mochi</button>
+    <button class="menu-btn update-btn hidden" data-action="update" id="update-btn">Restart to Update</button>
     <button class="menu-btn" data-action="quit">Quit</button>
   </div>
 
@@ -718,10 +807,46 @@
 
     // Animation cycling — Mochi does random things based on state
     let idleTimer = null;
+    let awakeAnimTimer = null;
+    let awakePicksSinceLick = 0;
+    const AWAKE_ANIM_MAX_MS = 7000;
+    const CAPPED_AWAKE_ANIMS = new Set(['waiting', 'dance', 'surprised', 'lick', 'shy']);
+
+    function clearAwakeAnimTimer() {
+      if (awakeAnimTimer) {
+        clearTimeout(awakeAnimTimer);
+        awakeAnimTimer = null;
+      }
+    }
+
+    function getAnimLoopMs(name) {
+      const a = ANIMS[name];
+      if (!a) return 1200;
+      return Math.max(400, a.frames * a.speed);
+    }
+
+    function playAwakeAnimBurst(name) {
+      clearAwakeAnimTimer();
+      play(name);
+      const loopMs = getAnimLoopMs(name);
+      const minMs = Math.max(1200, Math.round(loopMs * 1.2));
+      const rawMs = Math.round(loopMs * (1.8 + Math.random() * 1.1));
+      const maxMs = CAPPED_AWAKE_ANIMS.has(name) ? AWAKE_ANIM_MAX_MS : Math.max(AWAKE_ANIM_MAX_MS, Math.round(loopMs * 3.5));
+      const holdMs = Math.max(minMs, Math.min(maxMs, rawMs));
+
+      awakeAnimTimer = setTimeout(() => {
+        awakeAnimTimer = null;
+        if ((state !== 'awake' && state !== 'drowsy') || manualSleep || followingMouse) return;
+        play(defaultIdle());
+        scheduleCycleAnim();
+      }, holdMs);
+    }
 
     function randomAwakeAnim() {
+      // Pity rule: force lick if it hasn't appeared recently in awake picks.
+      if (awakePicksSinceLick >= 6) return 'lick';
       const anims = ['idle', 'idle2', 'waiting', 'dance', 'surprised', 'lick', 'shy'];
-      const weights = [25, 25, 15, 12, 10, 8, 5]; // weighted random
+      const weights = [25, 24, 14, 12, 10, 12, 5]; // weighted random, lick slightly boosted
       let total = weights.reduce((a, b) => a + b, 0);
       let r = Math.random() * total;
       for (let i = 0; i < anims.length; i++) {
@@ -747,6 +872,7 @@
 
     function scheduleCycleAnim() {
       clearTimeout(idleTimer);
+      clearAwakeAnimTimer();
       if (state === 'sleeping' || manualSleep || followingMouse) return;
 
       const s = sleepiness();
@@ -780,17 +906,20 @@
         // Awake/drowsy animations
         if (state === 'awake') {
           const next = randomAwakeAnim();
-          play(next, () => {
-            play(defaultIdle());
-            scheduleCycleAnim();
-          });
+          if (next === 'lick') awakePicksSinceLick = 0;
+          else awakePicksSinceLick++;
+          playAwakeAnimBurst(next);
         } else if (state === 'drowsy') {
           const drowsyAnims = ['sleepy', 'waiting', 'idle2'];
           const pick = drowsyAnims[Math.floor(Math.random() * drowsyAnims.length)];
-          play(pick, () => {
-            play(defaultIdle());
-            scheduleCycleAnim();
-          });
+          if (pick === 'sleepy') {
+            play(pick, () => {
+              play(defaultIdle());
+              scheduleCycleAnim();
+            });
+          } else {
+            playAwakeAnimBurst(pick);
+          }
         } else if (state === 'sleepy') {
           play('sleepy', () => {
             play(defaultIdle());
@@ -938,11 +1067,8 @@
         missedBedtimeAcknowledged = true;
         updateStreak(false); // break the streak
         state = 'awake';
-        play('waiting', () => {
-          showBubbleMsg("you missed bedtime... please sleep tonight");
-          play(defaultIdle());
-          scheduleCycleAnim();
-        });
+        showBubbleMsg("you missed bedtime... please sleep tonight");
+        playAwakeAnimBurst('waiting');
         return;
       }
 
@@ -968,12 +1094,15 @@
     let menuOpen = false, activePanel = null, bubbleTimer;
     let followingMouse = localStorage.getItem('followMouse') === 'true';
     let showingRoom = localStorage.getItem('showRoom') === 'true';
+    let updateReadyVersion = null;
+    let updateNagNeedsAck = false;
 
     function applyFollowState(enabled) {
       const changed = followingMouse !== enabled;
       followingMouse = enabled;
       localStorage.setItem('followMouse', String(enabled));
       document.getElementById('follow-btn').textContent = enabled ? 'Stop Following' : 'Follow Mouse';
+      canvas.classList.toggle('follow-mode', enabled);
       if (enabled) {
         keepFollowExcited();
         return;
@@ -985,6 +1114,41 @@
         play(defaultIdle());
         scheduleCycleAnim();
       }
+    }
+
+    function refreshUpdateButton() {
+      const updateBtn = document.getElementById('update-btn');
+      if (!updateReadyVersion) {
+        updateBtn.classList.add('hidden');
+        updateBtn.textContent = 'Restart to Update';
+        return;
+      }
+      updateBtn.classList.remove('hidden');
+      updateBtn.textContent = `Restart to Update ${updateReadyVersion}`;
+    }
+
+    function acknowledgeUpdateNag() {
+      if (!updateNagNeedsAck) return;
+      updateNagNeedsAck = false;
+      const bubble = document.getElementById('bubble');
+      if (bubble.classList.contains('show') && /update/i.test(bubble.textContent || '')) {
+        bubble.classList.remove('show');
+      }
+    }
+
+    function applyUpdateState(state) {
+      const nextVersion = state?.ready ? (state.version || 'new version') : null;
+      const becameReady = !updateReadyVersion && !!nextVersion;
+      const changedVersion = !!(updateReadyVersion && nextVersion && updateReadyVersion !== nextVersion);
+      updateReadyVersion = nextVersion;
+      if (becameReady || changedVersion) {
+        updateNagNeedsAck = true;
+        showBubble();
+      }
+      if (!updateReadyVersion) {
+        updateNagNeedsAck = false;
+      }
+      refreshUpdateButton();
     }
 
     function keepFollowExcited() {
@@ -2463,6 +2627,15 @@
 
     function showBubble() {
       if (mochiHidden || menuOpen || activePanel) return;
+      if (updateReadyVersion && updateNagNeedsAck) {
+        const b = document.getElementById('bubble');
+        b.textContent = `new update ${updateReadyVersion} is ready~ tap me then restart in menu`;
+        b.classList.add('show');
+        positionBubble();
+        clearTimeout(bubbleTimer);
+        bubbleTimer = setTimeout(() => b.classList.remove('show'), 5000);
+        return;
+      }
       const m = msgs[state];
       if (!m?.length) { document.getElementById('bubble').classList.remove('show'); return; }
       const b = document.getElementById('bubble');
@@ -2476,8 +2649,10 @@
     // Single click = random animation, double click = menu
     let clickTimer = null;
     let clickAnimEnd = 0; // timestamp when click animation should end
+    let forceDeadClick = false;
 
     function onCatClick() {
+      acknowledgeUpdateNag();
       if (clickTimer) {
         // Double click — open menu
         clearTimeout(clickTimer);
@@ -2490,7 +2665,7 @@
           // Single click — random animation
           if (state === 'sleeping' || followingMouse) return;
           const randomAnims = ['dead', 'excited', 'waiting', 'surprised', 'idle2', 'dance', 'lick', 'shy', 'refuse', 'despite'];
-          const pick = randomAnims[Math.floor(Math.random() * randomAnims.length)];
+          const pick = forceDeadClick ? 'dead' : randomAnims[Math.floor(Math.random() * randomAnims.length)];
           clearTimeout(idleTimer);
           play(pick);
           // Set a deadline — tick() will auto-return to idle after this
@@ -2716,6 +2891,15 @@
 
       // Cat click — single = random anim, double = menu
       canvas.addEventListener('click', onCatClick);
+      window.addEventListener('keydown', (e) => {
+        if ((e.key || '').toLowerCase() === 'd') forceDeadClick = true;
+      });
+      window.addEventListener('keyup', (e) => {
+        if ((e.key || '').toLowerCase() === 'd') forceDeadClick = false;
+      });
+      window.addEventListener('blur', () => {
+        forceDeadClick = false;
+      });
 
       // Menu buttons
       document.querySelectorAll('.menu-btn').forEach(btn => {
@@ -2740,6 +2924,10 @@
             menuOpen = false;
             document.getElementById('menu').classList.remove('open');
             window.electronAPI?.toggleFollow(!followingMouse);
+          } else if (action === 'update') {
+            menuOpen = false;
+            document.getElementById('menu').classList.remove('open');
+            window.electronAPI?.installUpdateNow?.();
           } else if (action === 'quit') {
             window.electronAPI?.quit();
           } else {
@@ -2755,6 +2943,7 @@
       setupInventory();
       updateSleepInfo();
       updateInvPreview();
+      canvas.classList.toggle('follow-mode', followingMouse);
 
       // Restore follow-mouse state
       if (followingMouse) {
@@ -2793,6 +2982,9 @@
         if (!menuOpen && !activePanel) {
           toggleMenu();
         }
+      });
+      window.electronAPI?.onUpdateState?.((state) => {
+        applyUpdateState(state);
       });
 
       // Restore room view state
@@ -2904,6 +3096,9 @@
       requestAnimationFrame(tick);
 
       setInterval(showBubble, 90000);
+      setInterval(() => {
+        if (updateReadyVersion && updateNagNeedsAck) showBubble();
+      }, 30000);
       setInterval(checkState, 15000); // check more often for bedtime reminders
     }
   </script>
