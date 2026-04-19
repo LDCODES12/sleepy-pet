@@ -902,7 +902,7 @@
       idle2:     { src: BASE+'Idle2.png', frames: 10, speed: 150 },
       sleepy:    { src: BASE+'Sleepy.png', frames: 8, speed: 200, once: true },
       laydown:   { src: BASE+'LayDown.png', frames: 12, speed: 140, once: true },
-      sleep:     { src: BASE+'Sleep.png', frames: 4, speed: 350 },
+      sleep:     { src: BASE+'Sleep.png', frames: 4, speed: 650 },
       eating:    { src: BASE+'Eating.png', frames: 15, speed: 120 },
       dance:     { src: BASE+'Dance.png', frames: 4, speed: 180 },
       excited:   { src: BASE+'Excited.png', frames: 12, speed: 120 },
@@ -993,6 +993,7 @@
     }
 
     let curAnim = 'idle', frame = 0, lastT = 0, animCb = null;
+    let heldAnimFrame = null;
     let loopResumeRequest = null;
     let catFlip = false; // true = face left
     let mochiHidden = false; // true when hidden via tray/menu
@@ -1212,8 +1213,11 @@
       const a = ANIMS[curAnim], img = imgs[curAnim];
       if (!a || !img) { requestAnimationFrame(tick); return; }
 
-      // Advance frame on timer
-      if (t - lastT >= a.speed) {
+      // Advance frame on timer, unless a passive rest is holding a settled pose.
+      if (heldAnimFrame?.anim === curAnim) {
+        frame = heldAnimFrame.frame;
+        lastT = t;
+      } else if (t - lastT >= a.speed) {
         const completedAnim = curAnim;
         lastT = t;
         frame++;
@@ -1248,8 +1252,20 @@
 
     function play(name, cb) {
       if (!ANIMS[name]) return;
+      heldAnimFrame = null;
       loopResumeRequest = null;
       curAnim = name; frame = 0; lastT = 0; animCb = cb || null;
+    }
+
+    function holdFinalFrame(name) {
+      const anim = ANIMS[name];
+      if (!anim) return;
+      loopResumeRequest = null;
+      animCb = null;
+      curAnim = name;
+      frame = Math.max(0, anim.frames - 1);
+      lastT = performance.now();
+      heldAnimFrame = { anim: name, frame };
     }
 
     // ═══════ STATE ═══════
@@ -1378,6 +1394,7 @@
 
     // Animation cycling — Mochi does random things based on state
     let idleTimer = null;
+    let passiveRestTimer = null;
     let awakePicksSinceLick = 0;
     const AWAKE_ANIM_MAX_MS = 7000;
     const CAPPED_AWAKE_ANIMS = new Set(['waiting', 'dance', 'surprised', 'lick', 'shy']);
@@ -1388,6 +1405,9 @@
 
     function clearAwakeAnimTimer() {
       clearLoopResumeRequest();
+      clearTimeout(passiveRestTimer);
+      passiveRestTimer = null;
+      heldAnimFrame = null;
     }
 
     function resumeFromTemporaryAnimation() {
@@ -1423,22 +1443,59 @@
     }
 
     function passiveRestMs(s = sleepiness()) {
-      return 24000 + s * 70000 + Math.random() * (22000 + s * 20000);
+      return 45000 + s * 140000 + Math.random() * (45000 + s * 90000);
     }
 
-    function finishPassiveRest() {
+    function passiveNapMs(s = sleepiness()) {
+      return 180000 + s * 420000 + Math.random() * (120000 + s * 240000);
+    }
+
+    function shouldPassiveNap(s = sleepiness()) {
+      if (state === 'awake' && s < 0.55) return false;
+      const stateBoost = state === 'sleepy' ? 0.28 : state === 'drowsy' ? 0.14 : 0;
+      return Math.random() < Math.min(0.72, 0.08 + s * 0.38 + stateBoost);
+    }
+
+    function continuePassiveRest(restMs) {
+      holdFinalFrame('laydown');
+      clearTimeout(passiveRestTimer);
+      passiveRestTimer = setTimeout(() => {
+        passiveRestTimer = null;
+        finishPassiveRest();
+      }, restMs);
+    }
+
+    function continuePassiveNap(napMs) {
+      play('sleep');
+      clearTimeout(passiveRestTimer);
+      passiveRestTimer = setTimeout(() => {
+        passiveRestTimer = null;
+        wakeFromPassiveRest();
+      }, napMs);
+    }
+
+    function wakeFromPassiveRest() {
       if (!canPassiveRest()) return;
-      const s = sleepiness();
-      const stayDownChance = state === 'sleepy' ? 0.82 : state === 'drowsy' ? 0.58 : 0.28 + s * 0.42;
-      if (Math.random() < stayDownChance) {
-        startPassiveRest(passiveRestMs(s) * (0.65 + Math.random() * 0.35));
-        return;
-      }
       play('sleepy', () => {
         if (!canPassiveRest()) return;
         play(defaultIdle());
         scheduleCycleAnim();
       });
+    }
+
+    function finishPassiveRest() {
+      if (!canPassiveRest()) return;
+      const s = sleepiness();
+      if (shouldPassiveNap(s)) {
+        continuePassiveNap(passiveNapMs(s));
+        return;
+      }
+      const stayDownChance = state === 'sleepy' ? 0.78 : state === 'drowsy' ? 0.56 : 0.22 + s * 0.36;
+      if (Math.random() < stayDownChance) {
+        continuePassiveRest(passiveRestMs(s) * (0.65 + Math.random() * 0.35));
+        return;
+      }
+      wakeFromPassiveRest();
     }
 
     function startPassiveRest(restMs = passiveRestMs()) {
@@ -1447,8 +1504,7 @@
       if (!canPassiveRest()) return;
       play('laydown', () => {
         if (!canPassiveRest()) return;
-        play('sleep');
-        resumeAtCurrentLoopEnd(restMs, finishPassiveRest);
+        continuePassiveRest(restMs);
       });
     }
 
@@ -1547,6 +1603,7 @@
 
     function checkBedtimeReminders() {
       if (manualSleep || state === 'sleeping') return;
+      if (passiveRestTimer || heldAnimFrame || curAnim === 'sleep') return;
       const since = minsSinceBedtime();
       const mins = minsTo(bedtime);
       let key = '';
@@ -1567,11 +1624,11 @@
           window.electronAPI?.notify('Mochi', 'bedtime in 1 hour~');
         } else if (key === '30') {
           showBubbleMsg("start winding down...");
-          play('sleepy', () => play('laydown'));
+          play('sleepy', () => startPassiveRest(passiveRestMs(0.75)));
           window.electronAPI?.notify('Mochi', 'maybe start thinking about sleep?');
         } else if (key === 'now') {
           showBubbleMsg("it's bedtime...");
-          play('sleepy', () => play('laydown', () => play('sleep')));
+          play('sleepy', () => startPassiveRest(passiveRestMs(1)));
           window.electronAPI?.notify('Mochi', 'it\'s bedtime... goodnight?');
         }
       }

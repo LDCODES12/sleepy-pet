@@ -30,6 +30,8 @@ const seenPetMessageIds = new Set();
 // long-tail frames are not clipped by the transparent window bounds.
 const WIN_W = 372;
 const WIN_H = 440;
+const WIN_RIGHT_INSET = 0;
+const WIN_BOTTOM_INSET = 10;
 
 // Keep these in sync with the visible cat canvas in index.html.
 const CAT_STAGE_W = 160;
@@ -188,8 +190,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: WIN_W,
     height: WIN_H,
-    x: width - WIN_W - 10,
-    y: height - WIN_H - 10,
+    x: width - WIN_W - WIN_RIGHT_INSET,
+    y: height - WIN_H - WIN_BOTTOM_INSET,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -326,7 +328,7 @@ function showMochi() {
 
 function resetPosition() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  mainWindow?.setPosition(width - WIN_W - 10, height - WIN_H - 10);
+  mainWindow?.setPosition(width - WIN_W - WIN_RIGHT_INSET, height - WIN_H - WIN_BOTTOM_INSET);
 }
 
 function createRoomWindow(initialMode = 'edit', options = {}) {

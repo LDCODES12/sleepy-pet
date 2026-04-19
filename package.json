@@ -1,6 +1,6 @@
 {
   "name": "sleepy-pet",
-  "version": "1.2.15",
+  "version": "1.2.16",
   "description": "A kawaii desktop pet that helps you get to bed on time",
   "author": "Liam",
   "main": "main.js",
