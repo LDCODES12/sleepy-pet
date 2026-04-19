@@ -1025,11 +1025,14 @@
 
       if (followingMouse) keepFollowExcited();
 
-      // Auto-return from click animation
+      // Auto-return from click animation — re-evaluate state so we
+      // resume the correct animation (e.g. sick if overtired).
       if (clickAnimEnd && t >= clickAnimEnd) {
         clickAnimEnd = 0;
-        play(defaultIdle());
-        scheduleCycleAnim();
+        const prev = state;
+        state = '';
+        checkState();
+        if (!state) setState(prev || 'awake');
       }
 
       const a = ANIMS[curAnim], img = imgs[curAnim];
