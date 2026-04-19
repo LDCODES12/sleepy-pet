@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleFollow: (enabled) => ipcRenderer.send('toggle-follow', enabled),
   hideMochi: () => ipcRenderer.send('hide-mochi'),
   installUpdateNow: () => ipcRenderer.send('install-update-now'),
+  checkForUpdates: () => ipcRenderer.send('check-for-updates'),
   configurePetMessages: (config) => ipcRenderer.invoke('configure-pet-messages', config),
   sendPetMessage: (message) => ipcRenderer.invoke('send-pet-message', message),
   configureGroups: (config) => ipcRenderer.invoke('configure-groups', config),

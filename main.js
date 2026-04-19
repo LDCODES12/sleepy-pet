@@ -32,19 +32,20 @@ const WIN_W = 372;
 const WIN_H = 440;
 
 // Keep these in sync with the visible cat canvas in index.html.
-const CAT_STAGE_W = 128;
+const CAT_STAGE_W = 160;
 const CAT_STAGE_H = 80;
-const CAT_CANVAS_LEFT = WIN_W + 12 - CAT_STAGE_W; // CSS right:-12px
+const CAT_CANVAS_RIGHT = 4; // CSS right:4px
+const CAT_CANVAS_LEFT = WIN_W - CAT_CANVAS_RIGHT - CAT_STAGE_W;
 const CAT_CANVAS_TOP = WIN_H - 4 - CAT_STAGE_H; // CSS bottom:4px
-const CAT_CENTER_X = CAT_CANVAS_LEFT + 80;
-const CAT_FACE_LEFT_X = CAT_CANVAS_LEFT + 53;
-const CAT_FACE_RIGHT_X = CAT_CANVAS_LEFT + 102;
+const CAT_CENTER_X = CAT_CANVAS_LEFT + 112;
+const CAT_FACE_LEFT_X = CAT_CANVAS_LEFT + 85;
+const CAT_FACE_RIGHT_X = CAT_CANVAS_LEFT + 134;
 const CAT_FACE_Y = CAT_CANVAS_TOP + 37;
 // Follow mode pins the cat canvas to the top-left of the window in renderer,
 // so use local canvas coordinates for target math.
-const FOLLOW_CAT_CENTER_X = 80;
-const FOLLOW_CAT_FACE_LEFT_X = 53;
-const FOLLOW_CAT_FACE_RIGHT_X = 102;
+const FOLLOW_CAT_CENTER_X = 112;
+const FOLLOW_CAT_FACE_LEFT_X = 85;
+const FOLLOW_CAT_FACE_RIGHT_X = 134;
 const FOLLOW_CAT_FACE_Y = 37;
 const FOLLOW_TICK_MS = 16;
 const FOLLOW_LERP = 0.2;
@@ -1563,6 +1564,7 @@ ipcMain.on('close-room', () => {
 ipcMain.on('quit-app', () => app.quit());
 ipcMain.on('hide-mochi', () => hideMochi());
 ipcMain.on('install-update-now', () => installUpdateNow());
+ipcMain.on('check-for-updates', () => triggerManualUpdateCheck());
 ipcMain.on('notify', (_, { title, body }) => {
   if (Notification.isSupported()) new Notification({ title, body, silent: false }).show();
 });

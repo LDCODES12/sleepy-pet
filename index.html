@@ -11,8 +11,8 @@
     /* ── Cat canvas ── */
     #cat-canvas {
       position: absolute;
-      bottom: 4px; right: -12px;
-      width: 128px; height: 80px;
+      bottom: 4px; right: 4px;
+      width: 160px; height: 80px;
       image-rendering: pixelated;
       cursor: pointer;
       background: transparent;
@@ -434,6 +434,55 @@
       font-size: 7px; text-transform: uppercase;
       letter-spacing: 1.2px; color: #8f6d4d; margin-top: 5px; font-weight: 900;
     }
+    .settings-update-btn {
+      width: 100%;
+      height: 24px;
+      margin-top: 10px;
+      border: 0;
+      border-radius: 0;
+      cursor: pointer;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 9px;
+      font-weight: 900;
+      color: #4b3528;
+      background: #d6c08b;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 0 0 3px #fff2cf,
+        1px 1px 0 #2d2524;
+    }
+    .settings-update-btn:hover {
+      background: #fff2cf;
+      transform: translateY(-1px);
+    }
+    .settings-update-btn:active {
+      transform: translate(1px, 1px);
+    }
+    .settings-update-btn.ready {
+      background: #ffd96b;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 0 0 3px #fff2a1,
+        1px 1px 0 #8f6d4d;
+    }
+    .settings-update-btn:disabled {
+      cursor: default;
+      opacity: 0.6;
+      transform: none;
+    }
+    .settings-update-status {
+      min-height: 18px;
+      margin-top: 7px;
+      padding: 4px 5px;
+      background: #f2e2bc;
+      color: #6f5643;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 7px;
+      font-weight: 900;
+      line-height: 1.25;
+      text-align: center;
+      box-shadow: 0 0 0 1px #c2ae86;
+    }
 
     /* ── Inventory ── */
     #inv-panel { width: 220px; }
@@ -701,7 +750,7 @@
 </head>
 <body>
   <!-- Cat -->
-  <canvas id="cat-canvas" width="128" height="80"></canvas>
+  <canvas id="cat-canvas" width="160" height="80"></canvas>
   <div id="room-view-wrap">
     <canvas id="room-view" width="256" height="256"></canvas>
   </div>
@@ -753,6 +802,8 @@
       <div class="streak-count" id="streak-count">0</div>
       <div class="streak-label">night streak</div>
     </div>
+    <button class="settings-update-btn" id="settings-check-update">Check for Update</button>
+    <div class="settings-update-status" id="settings-update-status">Update checks run automatically.</div>
   </div>
 
   <!-- Inventory -->
@@ -835,9 +886,9 @@
     const visitorNameEl = document.getElementById('visitor-name');
     const visitorBubbleEl = document.getElementById('visitor-bubble');
     const CAT_RENDER_SCALE = 2;
-    const CAT_STAGE_W = 128;
+    const CAT_STAGE_W = 160;
     const CAT_STAGE_H = 80;
-    const CAT_STAGE_ANCHOR = { x: 80, y: 78 };
+    const CAT_STAGE_ANCHOR = { x: 112, y: 78 };
     const VISITOR_STAGE_W = 96;
     const VISITOR_STAGE_H = 80;
     const VISITOR_STAGE_ANCHOR = { x: 48, y: 78 };
@@ -1674,6 +1725,7 @@
     let followingMouse = localStorage.getItem('followMouse') === 'true';
     let showingRoom = localStorage.getItem('showRoom') === 'true';
     let updateReadyVersion = null;
+    let updateStatus = 'idle';
     let updateNoticeKey = '';
     let updateNoticeText = '';
     let updateNagNeedsAck = false;
@@ -1706,10 +1758,35 @@
       if (!updateReadyVersion) {
         updateBtn.classList.add('hidden');
         updateBtn.textContent = 'Restart to Update';
-        return;
+      } else {
+        updateBtn.classList.remove('hidden');
+        updateBtn.textContent = `Restart to Update ${updateReadyVersion}`;
       }
-      updateBtn.classList.remove('hidden');
-      updateBtn.textContent = `Restart to Update ${updateReadyVersion}`;
+
+      const settingsUpdateBtn = document.getElementById('settings-check-update');
+      const settingsUpdateStatus = document.getElementById('settings-update-status');
+      if (!settingsUpdateBtn || !settingsUpdateStatus) return;
+
+      settingsUpdateBtn.disabled = false;
+      settingsUpdateBtn.classList.toggle('ready', Boolean(updateReadyVersion));
+      if (updateReadyVersion) {
+        settingsUpdateBtn.textContent = `Restart to Update ${updateReadyVersion}`;
+        settingsUpdateStatus.textContent = 'Update is ready.';
+      } else if (updateStatus === 'checking') {
+        settingsUpdateBtn.textContent = 'Checking...';
+        settingsUpdateBtn.disabled = true;
+        settingsUpdateStatus.textContent = 'Looking for a new version.';
+      } else if (updateStatus === 'downloading') {
+        settingsUpdateBtn.textContent = 'Downloading...';
+        settingsUpdateBtn.disabled = true;
+        settingsUpdateStatus.textContent = 'Update found. Downloading now.';
+      } else if (updateStatus === 'error') {
+        settingsUpdateBtn.textContent = 'Retry Update Check';
+        settingsUpdateStatus.textContent = 'Update check failed.';
+      } else {
+        settingsUpdateBtn.textContent = 'Check for Update';
+        settingsUpdateStatus.textContent = 'Update checks run automatically.';
+      }
     }
 
     function updateNoticeForState(state) {
@@ -1747,6 +1824,7 @@
       const noticeText = updateNoticeForState(state);
       const noticeKey = noticeText ? `${state?.status || 'idle'}:${state?.version || 'new version'}` : '';
       updateReadyVersion = nextVersion;
+      updateStatus = state?.status || 'idle';
 
       if (noticeText && noticeKey !== updateNoticeKey) {
         updateNoticeKey = noticeKey;
@@ -3975,6 +4053,19 @@
           if (!manualSleep) checkState();
         };
       });
+
+      const settingsUpdateBtn = document.getElementById('settings-check-update');
+      settingsUpdateBtn.onclick = () => {
+        acknowledgeUpdateNag();
+        if (updateReadyVersion) {
+          window.electronAPI?.installUpdateNow?.();
+          return;
+        }
+        updateStatus = 'checking';
+        refreshUpdateButton();
+        window.electronAPI?.checkForUpdates?.();
+      };
+      refreshUpdateButton();
 
       // Cat click — single = random anim, double = menu
       canvas.addEventListener('click', onCatClick);
