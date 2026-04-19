@@ -1502,8 +1502,12 @@
       if (!enabled) {
         clickAnimEnd = 0;
         catFlip = false;
-        play(defaultIdle());
-        scheduleCycleAnim();
+        // Re-evaluate the correct state so we resume the right animation
+        // (e.g. sick if overtired) instead of unconditionally playing idle.
+        const prev = state;
+        state = '';
+        checkState();
+        if (!state) setState(prev || 'awake');
       }
     }
 
