@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installUpdateNow: () => ipcRenderer.send('install-update-now'),
   configurePetMessages: (config) => ipcRenderer.invoke('configure-pet-messages', config),
   sendPetMessage: (message) => ipcRenderer.invoke('send-pet-message', message),
+  configureGroups: (config) => ipcRenderer.invoke('configure-groups', config),
+  sendGroupMessage: (payload) => ipcRenderer.invoke('send-group-message', payload),
+  openGroupRoom: (payload) => ipcRenderer.send('open-group-room', payload),
+  updateCatState: (payload) => ipcRenderer.send('update-cat-state', payload),
   onStopFollow: (cb) => ipcRenderer.on('stop-follow', cb),
   onFollowState: (cb) => ipcRenderer.on('follow-state', (_, enabled) => cb(enabled)),
   onCursorDir: (cb) => ipcRenderer.on('cursor-dir', (_, dir) => cb(dir)),
@@ -17,5 +21,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onOpenMenu: (cb) => ipcRenderer.on('open-menu', cb),
   onUpdateState: (cb) => ipcRenderer.on('update-state', (_, state) => cb(state)),
   onPetMessage: (cb) => ipcRenderer.on('pet-message-received', (_, message) => cb(message)),
-  onPetMessageStatus: (cb) => ipcRenderer.on('pet-message-status', (_, status) => cb(status))
+  onPetMessageStatus: (cb) => ipcRenderer.on('pet-message-status', (_, status) => cb(status)),
+  onGroupEvent: (cb) => ipcRenderer.on('group-event', (_, event) => cb(event))
 });

@@ -239,6 +239,83 @@
       position: fixed; pointer-events: none; z-index: 999;
       image-rendering: pixelated; opacity: 0.75;
     }
+
+    /* ── Group mode ── */
+    body.group-mode .room-picker,
+    body.group-mode .palette { display: none !important; }
+    body.group-mode .mode-btn[data-mode="edit"] { display: none !important; }
+    body.group-mode .main-area { justify-content: center; }
+    body.group-mode .room-area { position: relative; }
+    .group-title {
+      position: absolute;
+      top: 8px; left: 12px;
+      font-weight: 900;
+      font-size: 12px;
+      color: #4b3528;
+      background: #fff7df;
+      padding: 4px 8px;
+      box-shadow: 0 0 0 1px #8f6d4d, 1px 1px 0 #8f6d4d;
+      letter-spacing: 0.5px;
+      display: none;
+    }
+    body.group-mode .group-title { display: block; }
+    .group-chat {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 420px;
+      z-index: 5;
+    }
+    body.group-mode .group-chat { display: flex; }
+    .group-chat-log {
+      max-height: 120px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      background: rgba(255,247,223,0.92);
+      padding: 6px 8px;
+      font-size: 10px;
+      font-weight: 900;
+      color: #4b3528;
+      box-shadow: 0 0 0 1px #8f6d4d;
+    }
+    .group-chat-log::-webkit-scrollbar { width: 6px; }
+    .group-chat-log::-webkit-scrollbar-thumb { background: #c2ae86; border-radius: 3px; }
+    .group-chat-log .g-line { line-height: 1.3; }
+    .group-chat-log .g-line b { color: #8a73d9; margin-right: 4px; }
+    .group-chat-input-row {
+      display: grid;
+      grid-template-columns: 1fr 56px;
+      gap: 6px;
+    }
+    .group-chat-input-row input {
+      border: 0; border-radius: 0;
+      background: #fff7df;
+      color: #4b3528;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 6px 8px;
+      outline: none;
+      box-shadow: 0 0 0 1px #8f6d4d, inset 0 -2px 0 #d6c08b;
+    }
+    .group-chat-input-row button {
+      height: 28px;
+      border: 0; border-radius: 0;
+      cursor: pointer;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 11px; font-weight: 900;
+      color: #4b3528;
+      background: #ffd96b;
+      box-shadow: 0 0 0 1px #2d2524, inset 0 0 0 3px #fff2a1, 1px 1px 0 #8f6d4d;
+    }
+    .group-chat-input-row button:hover { background: #fff2cf; transform: translateY(-1px); }
+    .group-chat-input-row button:active { transform: translate(1px, 1px); }
   </style>
 </head>
 <body>
@@ -251,6 +328,14 @@
     <div class="palette" id="palette"></div>
     <div class="room-area">
       <canvas id="room-canvas" width="512" height="512"></canvas>
+      <div class="group-title" id="group-title"></div>
+      <div class="group-chat" id="group-chat">
+        <div class="group-chat-log" id="group-chat-log"></div>
+        <div class="group-chat-input-row">
+          <input type="text" id="group-chat-input" placeholder="Say hi…" maxlength="180" spellcheck="true" />
+          <button id="group-chat-send">Send</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2421,6 +2506,8 @@ function render(t) {
     rctx.restore();
   }});
 
+  if (groupRoomId) addGroupCatDrawables(drawables, t);
+
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 
@@ -2826,14 +2913,652 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.onclick = () => setRoomMode(btn.dataset.mode);
 });
 
+// ═══════ GROUP MODE ═══════
+const GROUP_ROOM_NUM = 1;
+const GROUP_CHAT_MAX = 180;
+const GROUP_MEMBER_STALE_MS = 60000;
+const GROUP_BUBBLE_MS = 4200;
+const GROUP_CAT_MIN_DISTANCE = 62;
+const GROUP_CAT_MOVE_SPEED = 0.055;
+const GROUP_CAT_WANDER_MIN_MS = 4500;
+const GROUP_CAT_WANDER_SPREAD_MS = 6500;
+const GROUP_ROOM_PRESENCE_MS = 1200;
+const GROUP_SEAT_POSITIONS = [
+  { x: 160, y: 330 },
+  { x: 340, y: 330 },
+  { x: 120, y: 220 },
+  { x: 380, y: 220 },
+  { x: 250, y: 400 },
+  { x: 250, y: 180 },
+  { x: 90,  y: 290 },
+  { x: 410, y: 290 },
+];
+const GROUP_ANIM_SPECS = {
+  idle:    { src: SPRITES + 'Idle.png',    frames: 10, speed: 150 },
+  sleep:   { src: SPRITES + 'Sleep.png',   frames: 4,  speed: 350 },
+  excited: { src: SPRITES + 'Excited.png', frames: 12, speed: 120 },
+  sleepy:  { src: SPRITES + 'Sleepy.png',  frames: 8,  speed: 200 },
+  sick:    { src: SPRITES + 'catsick1.png',frames: 5,  speed: 300 },
+};
+const GROUP_ATLAS_ANIM_ROWS = { idle: 0, sleepy: 4, excited: 5, sleep: 11 };
+const groupAnimImgs = {};
+for (const [name, spec] of Object.entries(GROUP_ANIM_SPECS)) {
+  const img = new Image();
+  img.onload = () => { groupAnimImgs[name] = img; };
+  img.src = spec.src;
+}
+const groupAtlasCache = new Map(); // key -> { img, loaded }
+function getGroupAtlas(appearance) {
+  const ribbon = appearance?.selectedRibbon || null;
+  const skin = appearance?.selectedSkin || null;
+  const key = ribbon ? 'ribbon:' + ribbon : skin ? 'skin:' + skin : 'classic';
+  if (key === 'classic') return null;
+  if (groupAtlasCache.has(key)) return groupAtlasCache.get(key);
+  const entry = { img: null, loaded: false };
+  groupAtlasCache.set(key, entry);
+  const img = new Image();
+  img.onload = () => { entry.img = img; entry.loaded = true; };
+  img.src = ribbon
+    ? 'assets/cat-pack-paid/CatPackPaid/Sprites/CatwithRibbon/CatPackRibbon' + ribbon + '.png'
+    : 'assets/cat-pack-paid/CatPackPaid/CatPackDifferentSkins/' + skin;
+  return entry;
+}
+
+let groupRoomId = null;
+let groupRoomName = null;
+const groupMembers = new Map(); // userId -> {catName, appearance, catState, catSleeping, lastSeen, isOwn, frame, lastFrameAt, hue}
+const groupBubbles = new Map(); // userId -> {text, until}
+const groupChatLog = []; // {userId, catName, text, isOwn, sentAt}
+const groupSeenChatIds = new Set();
+let groupSendInFlight = false;
+let ownUserId = null; // set from presence self-echo
+let lastGroupRoomPresenceAt = 0;
+
+function sanitizeGroupIdClient(id) {
+  return String(id || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 32);
+}
+
+function clearGroupChatDom() {
+  const log = document.getElementById('group-chat-log');
+  if (log) log.innerHTML = '';
+  const input = document.getElementById('group-chat-input');
+  if (input) input.value = '';
+}
+
+function resetGroupRoomState() {
+  groupMembers.clear();
+  groupBubbles.clear();
+  groupChatLog.length = 0;
+  groupSeenChatIds.clear();
+  ownUserId = null;
+  clearGroupChatDom();
+}
+
+function loadGroupRoomCanvasState() {
+  currentRoom = 'group_' + groupRoomId;
+  loadMochiPos();
+  loadRoomLayout();
+  document.querySelectorAll('.room-thumb').forEach((t, i) => t.classList.toggle('active', i + 1 === GROUP_ROOM_NUM));
+  if (roomImgs[GROUP_ROOM_NUM]) {
+    roomBgImg = roomImgs[GROUP_ROOM_NUM];
+  } else {
+    const img = new Image();
+    img.onload = () => { roomImgs[GROUP_ROOM_NUM] = img; roomBgImg = img; };
+    img.src = ROOM_BASE + GROUP_ROOM_NUM + '.png';
+  }
+}
+
+function enterGroupMode(groupId, groupName) {
+  const nextGroupId = sanitizeGroupIdClient(groupId);
+  const switchedGroups = groupRoomId && groupRoomId !== nextGroupId;
+  groupRoomId = nextGroupId;
+  groupRoomName = String(groupName || '').trim().slice(0, 40) || 'Group';
+  if (!groupRoomId) return;
+  if (switchedGroups || groupMembers.size || groupChatLog.length) resetGroupRoomState();
+  document.body.classList.add('group-mode');
+  const titleEl = document.getElementById('group-title');
+  if (titleEl) titleEl.textContent = groupRoomName + ' · ' + groupRoomId;
+  loadGroupRoomCanvasState();
+  setRoomMode('play');
+  setupGroupChatUI();
+  loadGroupSnapshot();
+  setHint('Group room is live · Play is on · Say something and your cat will speak');
+}
+
+function exitGroupMode(nextMode = 'edit') {
+  if (!groupRoomId) {
+    setRoomMode(nextMode);
+    return;
+  }
+  document.body.classList.remove('group-mode');
+  groupRoomId = null;
+  groupRoomName = null;
+  resetGroupRoomState();
+  const savedRoom = parseInt(localStorage.getItem('currentRoom') || '1');
+  loadRoom(Number.isFinite(savedRoom) ? savedRoom : 1);
+  setRoomMode(nextMode);
+}
+
+function normalizeGroupMember(raw = {}) {
+  const userId = String(raw.userId || raw.id || raw.from?.id || '').slice(0, 64);
+  if (!userId) return null;
+  return {
+    userId,
+    catName: String(raw.catName || raw.from?.catName || 'Mochi').slice(0, 24) || 'Mochi',
+    appearance: raw.appearance || raw.from?.appearance || {},
+    catState: String(raw.catState || raw.state || 'awake').slice(0, 24),
+    catSleeping: typeof raw.catSleeping === 'boolean' ? raw.catSleeping : !!raw.sleeping,
+    lastSeen: Number(raw.lastSeen) || 0,
+    isOwn: !!raw.isOwn,
+    roomX: Number.isFinite(Number(raw.roomX)) ? Number(raw.roomX) : null,
+    roomY: Number.isFinite(Number(raw.roomY)) ? Number(raw.roomY) : null,
+    frame: raw.frame || 0,
+    lastFrameAt: raw.lastFrameAt || performance.now(),
+    hue: raw.hue != null ? raw.hue : hashStringHue(userId),
+    x: Number.isFinite(Number(raw.x)) ? Number(raw.x) : null,
+    y: Number.isFinite(Number(raw.y)) ? Number(raw.y) : null,
+    targetX: Number.isFinite(Number(raw.targetX)) ? Number(raw.targetX) : null,
+    targetY: Number.isFinite(Number(raw.targetY)) ? Number(raw.targetY) : null,
+    nextWanderAt: raw.nextWanderAt || 0,
+    lastMotionAt: raw.lastMotionAt || performance.now(),
+    flip: !!raw.flip
+  };
+}
+
+function upsertGroupMember(raw) {
+  const next = normalizeGroupMember(raw);
+  if (!next) return null;
+  const prev = groupMembers.get(next.userId) || {};
+  const merged = {
+    ...prev,
+    ...next,
+    frame: prev.frame || next.frame || 0,
+    lastFrameAt: prev.lastFrameAt || next.lastFrameAt || performance.now(),
+    hue: prev.hue != null ? prev.hue : next.hue,
+    x: prev.x ?? next.roomX ?? next.x,
+    y: prev.y ?? next.roomY ?? next.y,
+    targetX: next.roomX ?? prev.targetX ?? next.targetX,
+    targetY: next.roomY ?? prev.targetY ?? next.targetY,
+    lastMotionAt: prev.lastMotionAt || performance.now(),
+    nextWanderAt: prev.nextWanderAt || 0,
+    flip: prev.flip || false
+  };
+  groupMembers.set(merged.userId, merged);
+  if (merged.isOwn) ownUserId = merged.userId;
+  return merged;
+}
+
+function applyGroupSnapshot(snapshot) {
+  if (!snapshot?.ok || sanitizeGroupIdClient(snapshot.groupId) !== groupRoomId) return;
+  resetGroupRoomState();
+  for (const member of snapshot.members || []) upsertGroupMember(member);
+  const messages = Array.isArray(snapshot.messages) ? snapshot.messages : [];
+  for (const message of messages) {
+    appendGroupChatLine({
+      id: message.id,
+      userId: message.userId,
+      catName: message.catName || 'Mochi',
+      text: message.text || '',
+      isOwn: !!message.isOwn,
+      sentAt: message.sentAt
+    }, { bubble: false });
+  }
+}
+
+function loadGroupSnapshot() {
+  if (!groupRoomId) return;
+  window.electronAPI?.getGroupSnapshot?.(groupRoomId)
+    .then(applyGroupSnapshot)
+    .catch(() => {});
+}
+
+function setupGroupChatUI() {
+  const input = document.getElementById('group-chat-input');
+  const send = document.getElementById('group-chat-send');
+  if (!input || !send) return;
+  const doSend = () => {
+    if (groupSendInFlight || !groupRoomId) return;
+    const text = String(input.value || '').trim().slice(0, GROUP_CHAT_MAX);
+    if (!text) return;
+    groupSendInFlight = true;
+    send.disabled = true;
+    const ownMember = ownUserId ? groupMembers.get(ownUserId) : null;
+    const pendingId = 'pending-' + Date.now().toString(36);
+    appendGroupChatLine({
+      id: pendingId,
+      userId: ownUserId || 'self',
+      catName: ownMember?.catName || 'You',
+      text,
+      isOwn: true
+    });
+    Promise.resolve(window.electronAPI?.sendGroupMessage?.({ groupId: groupRoomId, text }))
+      .then((r) => {
+        if (!r?.ok) appendGroupChatLine({ userId: 'system', catName: '!', text: r?.error || 'Could not send.', isOwn: false });
+        else input.value = '';
+      })
+      .catch((e) => appendGroupChatLine({ userId: 'system', catName: '!', text: String(e?.message || e), isOwn: false }))
+      .finally(() => { groupSendInFlight = false; send.disabled = false; input.focus(); });
+  };
+  send.onclick = doSend;
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+  };
+}
+
+function appendGroupChatLine(line, options = {}) {
+  const textValue = String(line?.text || '').slice(0, GROUP_CHAT_MAX);
+  if (!textValue) return;
+  if (line.id && groupSeenChatIds.has(line.id)) return;
+  if (line.id) groupSeenChatIds.add(line.id);
+  const safeLine = {
+    id: line.id || null,
+    userId: String(line.userId || '').slice(0, 64),
+    catName: String(line.catName || 'Mochi').slice(0, 24) || 'Mochi',
+    text: textValue,
+    isOwn: !!line.isOwn,
+    sentAt: line.sentAt || new Date().toISOString()
+  };
+  groupChatLog.push(safeLine);
+  if (groupChatLog.length > 80) groupChatLog.splice(0, groupChatLog.length - 80);
+  const log = document.getElementById('group-chat-log');
+  if (log) {
+    const row = document.createElement('div');
+    row.className = 'g-line';
+    const who = document.createElement('b');
+    who.textContent = safeLine.catName + ':';
+    const text = document.createElement('span');
+    text.textContent = ' ' + safeLine.text;
+    row.appendChild(who);
+    row.appendChild(text);
+    log.appendChild(row);
+    while (log.childNodes.length > 80) log.removeChild(log.firstChild);
+    log.scrollTop = log.scrollHeight;
+  }
+  if (options.bubble !== false && safeLine.userId && safeLine.userId !== 'system') {
+    groupBubbles.set(safeLine.userId, { text: safeLine.text, until: Date.now() + GROUP_BUBBLE_MS });
+  }
+}
+
+function handleRoomGroupEvent(event) {
+  if (!event || !groupRoomId) return;
+  if (sanitizeGroupIdClient(event.groupId) !== groupRoomId) return;
+  const payload = event.payload || event;
+  const from = payload.from || {};
+  const userId = String(from.id || '').slice(0, 64);
+  if (!userId) return;
+  if (event.kind === 'group-presence') {
+    if (event.isOwn) ownUserId = userId;
+    upsertGroupMember({
+      userId,
+      catName: String(from.catName || 'Mochi').slice(0, 24) || 'Mochi',
+      appearance: from.appearance || {},
+      catState: String(payload.catState || payload.state || 'awake').slice(0, 24),
+      catSleeping: typeof payload.catSleeping === 'boolean' ? payload.catSleeping : !!payload.sleeping,
+      lastSeen: Date.now(),
+      isOwn: !!event.isOwn,
+      roomX: Number.isFinite(Number(payload.roomX)) ? Number(payload.roomX) : null,
+      roomY: Number.isFinite(Number(payload.roomY)) ? Number(payload.roomY) : null
+    });
+  } else if (event.kind === 'group-chat') {
+    const text = String(payload.text || '').slice(0, GROUP_CHAT_MAX);
+    if (!text) return;
+    if (event.isOwn) ownUserId = userId;
+    appendGroupChatLine({
+      id: payload.id,
+      userId,
+      catName: String(from.catName || 'Mochi').slice(0, 24) || 'Mochi',
+      text,
+      isOwn: !!event.isOwn,
+      sentAt: payload.sentAt
+    });
+  }
+}
+
+function hashStringHue(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function getGroupSeatPos(userId, idx) {
+  const base = GROUP_SEAT_POSITIONS[idx % GROUP_SEAT_POSITIONS.length];
+  return { x: base.x, y: base.y };
+}
+
+function groupMemberIsStale(member) {
+  return Date.now() - (member.lastSeen || 0) > GROUP_MEMBER_STALE_MS;
+}
+
+function groupMemberStatus(member) {
+  if (groupMemberIsStale(member)) return 'away';
+  if (member.catSleeping || member.catState === 'sleeping') return 'asleep';
+  return '';
+}
+
+function groupAnimFor(member) {
+  if (groupMemberIsStale(member)) return 'sleep';
+  if (member.catSleeping || member.catState === 'sleeping') return 'sleep';
+  const s = member.catState;
+  if (s === 'overtired') return 'sick';
+  if (s === 'sleepy' || s === 'drowsy') return 'sleepy';
+  if (s === 'waking') return 'excited';
+  return 'idle';
+}
+
+function groupFootCenterFor(x, y) {
+  return { x: x + MOCHI_FOOT_CENTER.x, y: y + MOCHI_FOOT_CENTER.y };
+}
+
+function getGroupOccupiedPoints(exceptUserId = '') {
+  const points = [groupFootCenterFor(mochiX, mochiY)];
+  for (const [userId, member] of groupMembers.entries()) {
+    if (userId === exceptUserId || member.isOwn || userId === ownUserId) continue;
+    if (!Number.isFinite(member.x) || !Number.isFinite(member.y)) continue;
+    points.push(groupFootCenterFor(member.x, member.y));
+  }
+  return points;
+}
+
+function scoreGroupPosition(pos, exceptUserId = '') {
+  const foot = groupFootCenterFor(pos.x, pos.y);
+  let minDist = Infinity;
+  for (const point of getGroupOccupiedPoints(exceptUserId)) {
+    minDist = Math.min(minDist, Math.hypot(foot.x - point.x, foot.y - point.y));
+  }
+  const centerBias = 80 - Math.hypot(foot.x - 256, foot.y - 300) * 0.12;
+  return Math.min(minDist, GROUP_CAT_MIN_DISTANCE * 2) + centerBias;
+}
+
+function isGroupPositionClear(pos, exceptUserId = '', minDistance = GROUP_CAT_MIN_DISTANCE) {
+  if (!pos || !isMochiPositionWalkable(pos.x, pos.y, getMochiBlockingFootprints(), 4)) return false;
+  const foot = groupFootCenterFor(pos.x, pos.y);
+  return getGroupOccupiedPoints(exceptUserId).every(point => Math.hypot(foot.x - point.x, foot.y - point.y) >= minDistance);
+}
+
+function groupCandidatePositions(seed = 0) {
+  const candidates = [...GROUP_SEAT_POSITIONS];
+  for (let y = 170; y <= 390; y += 46) {
+    for (let x = 70; x <= 410; x += 56) {
+      candidates.push({ x, y });
+    }
+  }
+  return candidates
+    .map((pos, idx) => ({ pos, rank: (idx * 37 + seed) % 997 }))
+    .sort((a, b) => a.rank - b.rank)
+    .map(entry => entry.pos);
+}
+
+function findNearestGroupClearPosition(x, y, userId) {
+  const blockers = getMochiBlockingFootprints();
+  const requested = findNearestWalkableMochiPosition(x, y, blockers, 120, {
+    preferClearance: true,
+    targetClearance: 4
+  });
+  if (requested && isGroupPositionClear(requested, userId)) return requested;
+
+  let best = requested || null;
+  let bestScore = best ? scoreGroupPosition(best, userId) : -Infinity;
+  for (let radius = 28; radius <= 112; radius += 28) {
+    for (let i = 0; i < 12; i++) {
+      const angle = (Math.PI * 2 * i) / 12;
+      const candidate = findNearestWalkableMochiPosition(
+        x + Math.cos(angle) * radius,
+        y + Math.sin(angle) * radius,
+        blockers,
+        48,
+        { preferClearance: true, targetClearance: 4 }
+      );
+      if (!candidate) continue;
+      const score = scoreGroupPosition(candidate, userId);
+      if (isGroupPositionClear(candidate, userId)) return candidate;
+      if (score > bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    }
+  }
+  return best || findGroupIdlePosition(userId, 0);
+}
+
+function findGroupIdlePosition(userId, seatIndex) {
+  const seed = hashStringHue(userId) + seatIndex * 53;
+  let best = null;
+  let bestScore = -Infinity;
+  for (const base of groupCandidatePositions(seed)) {
+    const candidate = findNearestWalkableMochiPosition(base.x, base.y, getMochiBlockingFootprints(), 80, {
+      preferClearance: true,
+      targetClearance: 4
+    });
+    if (!candidate) continue;
+    const score = scoreGroupPosition(candidate, userId);
+    if (isGroupPositionClear(candidate, userId)) return candidate;
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return best || getGroupSeatPos(userId, seatIndex);
+}
+
+function ensureGroupMemberPosition(member, userId, seatIndex) {
+  if (Number.isFinite(member.x) && Number.isFinite(member.y)) return;
+  const preferred = Number.isFinite(member.roomX) && Number.isFinite(member.roomY)
+    ? findNearestGroupClearPosition(member.roomX, member.roomY, userId)
+    : findGroupIdlePosition(userId, seatIndex);
+  member.x = preferred.x;
+  member.y = preferred.y;
+  member.targetX = preferred.x;
+  member.targetY = preferred.y;
+  member.nextWanderAt = performance.now() + GROUP_CAT_WANDER_MIN_MS + (hashStringHue(userId) % GROUP_CAT_WANDER_SPREAD_MS);
+}
+
+function updateGroupMemberMotion(member, userId, seatIndex, t) {
+  ensureGroupMemberPosition(member, userId, seatIndex);
+  const animName = groupAnimFor(member);
+  const currentPos = { x: member.x, y: member.y };
+  const needsSpacing = !isGroupPositionClear(currentPos, userId, GROUP_CAT_MIN_DISTANCE * 0.85);
+  const remoteTarget = Number.isFinite(member.roomX) && Number.isFinite(member.roomY) && !groupMemberIsStale(member);
+  if (needsSpacing) {
+    const next = findGroupIdlePosition(userId, seatIndex);
+    member.targetX = next.x;
+    member.targetY = next.y;
+  } else if (remoteTarget) {
+    const clear = findNearestGroupClearPosition(member.roomX, member.roomY, userId);
+    member.targetX = clear.x;
+    member.targetY = clear.y;
+  } else if (animName === 'sleep') {
+    member.targetX = member.x;
+    member.targetY = member.y;
+  } else if (!Number.isFinite(member.targetX) || !Number.isFinite(member.targetY) || t >= (member.nextWanderAt || 0)) {
+    const next = findGroupIdlePosition(userId, seatIndex);
+    member.targetX = next.x;
+    member.targetY = next.y;
+    member.nextWanderAt = t + GROUP_CAT_WANDER_MIN_MS + (hashStringHue(userId + String(t | 0)) % GROUP_CAT_WANDER_SPREAD_MS);
+  }
+
+  const dt = Math.min(48, Math.max(0, t - (member.lastMotionAt || t)));
+  member.lastMotionAt = t;
+  const dx = (member.targetX || member.x) - member.x;
+  const dy = (member.targetY || member.y) - member.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist > 1) {
+    const step = Math.min(dist, GROUP_CAT_MOVE_SPEED * dt);
+    member.x += (dx / dist) * step;
+    member.y += (dy / dist) * step;
+    member.flip = dx > 0;
+  }
+}
+
+function addGroupCatDrawables(drawables, t) {
+  const entries = Array.from(groupMembers.entries()).sort(([a], [b]) => a.localeCompare(b));
+  let seat = 0;
+  let ownMember = ownUserId ? groupMembers.get(ownUserId) : null;
+  for (const [userId, member] of entries) {
+    if (member.isOwn || userId === ownUserId) {
+      ownMember = member;
+      continue;
+    }
+    updateGroupMemberMotion(member, userId, seat, t);
+    const sortFootprint = getMochiFootprintAt(member.x, member.y, member.flip);
+    const sortY = sortFootprint ? sortFootprint.rect.y + sortFootprint.rect.h : member.y + MOCHI_FOOT_CENTER.y;
+    drawables.push({
+      y: sortY,
+      draw: () => drawGroupCat(member, member.x, member.y, userId)
+    });
+    seat++;
+  }
+
+  if (ownMember) {
+    drawables.push({
+      y: mochiY + MOCHI_FOOT_CENTER.y + 0.1,
+      draw: () => drawGroupOverlays(ownMember, mochiX, mochiY, ownMember.userId || ownUserId)
+    });
+  }
+  sendGroupRoomPresence(t);
+}
+
+function sendGroupRoomPresence(t) {
+  if (!groupRoomId || t - lastGroupRoomPresenceAt < GROUP_ROOM_PRESENCE_MS) return;
+  lastGroupRoomPresenceAt = t;
+  window.electronAPI?.updateGroupRoomPresence?.({
+    groupId: groupRoomId,
+    x: Math.round(mochiX),
+    y: Math.round(mochiY)
+  });
+}
+
+function drawGroupSprite(img, sx, sy, sw, sh, x, y, flip) {
+  if (!img) return;
+  if (!flip) {
+    rctx.drawImage(img, sx, sy, sw, sh, x, y, MOCHI_DRAW_SIZE, MOCHI_DRAW_SIZE);
+    return;
+  }
+  rctx.save();
+  rctx.translate(x + MOCHI_DRAW_SIZE, y);
+  rctx.scale(-1, 1);
+  rctx.drawImage(img, sx, sy, sw, sh, 0, 0, MOCHI_DRAW_SIZE, MOCHI_DRAW_SIZE);
+  rctx.restore();
+}
+
+function drawGroupCat(member, x, y, userId) {
+  const animName = groupAnimFor(member);
+  const spec = GROUP_ANIM_SPECS[animName];
+  if (!spec) return;
+  const atlas = getGroupAtlas(member.appearance);
+  const now = performance.now();
+  if (now - (member.lastFrameAt || 0) >= spec.speed) {
+    member.frame = ((member.frame || 0) + 1) % spec.frames;
+    member.lastFrameAt = now;
+  }
+  const f = member.frame || 0;
+
+  rctx.save();
+  rctx.imageSmoothingEnabled = false;
+  if (atlas && atlas.img && GROUP_ATLAS_ANIM_ROWS[animName] !== undefined) {
+    const row = GROUP_ATLAS_ANIM_ROWS[animName];
+    drawGroupSprite(atlas.img, f * S, row * S, S, S, x, y, member.flip);
+  } else if (animName === 'sick' || animName === 'sleepy') {
+    const img = groupAnimImgs[animName];
+    if (img) drawGroupSprite(img, f * S, 0, S, S, x, y, member.flip);
+    else {
+      const fallback = groupAnimImgs.idle;
+      if (fallback) drawGroupSprite(fallback, 0, 0, S, S, x, y, member.flip);
+    }
+  } else {
+    const img = groupAnimImgs[animName] || groupAnimImgs.idle;
+    if (img) drawGroupSprite(img, f * S, 0, S, S, x, y, member.flip);
+  }
+  rctx.restore();
+
+  drawGroupOverlays(member, x, y, userId);
+}
+
+function drawGroupOverlays(member, x, y, userId) {
+  drawGroupLabel(member.catName || 'Mochi', groupMemberStatus(member), x + MOCHI_DRAW_SIZE / 2, y - 4);
+  const bubble = groupBubbles.get(userId);
+  if (bubble && bubble.until > Date.now()) {
+    drawGroupBubble(bubble.text, x + MOCHI_DRAW_SIZE / 2, y - 18);
+  }
+}
+
+function drawGroupLabel(name, status, cx, cy) {
+  rctx.save();
+  rctx.font = '900 11px ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace';
+  rctx.textAlign = 'center';
+  rctx.textBaseline = 'bottom';
+  const safeName = String(name || 'Mochi').slice(0, 24);
+  const safeStatus = String(status || '').slice(0, 12);
+  const nameW = rctx.measureText(safeName).width;
+  rctx.font = '900 9px ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace';
+  const statusW = safeStatus ? rctx.measureText(safeStatus).width : 0;
+  const w = Math.max(nameW, statusW) + 12;
+  const h = safeStatus ? 27 : 16;
+  rctx.fillStyle = 'rgba(255, 247, 223, 0.92)';
+  rctx.fillRect(cx - w / 2, cy - h, w, h);
+  rctx.fillStyle = '#8f6d4d';
+  rctx.fillRect(cx - w / 2, cy - h, w, 1);
+  rctx.fillRect(cx - w / 2, cy - 1, w, 1);
+  rctx.fillRect(cx - w / 2, cy - h, 1, h);
+  rctx.fillRect(cx + w / 2 - 1, cy - h, 1, h);
+  rctx.fillStyle = '#4b3528';
+  rctx.font = '900 11px ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace';
+  rctx.fillText(safeName, cx, safeStatus ? cy - 13 : cy - 3);
+  if (safeStatus) {
+    rctx.font = '900 9px ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace';
+    rctx.fillStyle = safeStatus === 'away' ? '#7a6a5c' : '#8a73d9';
+    rctx.fillText(safeStatus, cx, cy - 3);
+  }
+  rctx.restore();
+}
+
+function drawGroupBubble(text, cx, cy) {
+  rctx.save();
+  rctx.font = '900 11px ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace';
+  rctx.textAlign = 'center';
+  rctx.textBaseline = 'bottom';
+  const display = text.length > 40 ? text.slice(0, 39) + '…' : text;
+  const w = Math.min(220, rctx.measureText(display).width + 12);
+  rctx.fillStyle = 'rgba(255, 247, 223, 0.96)';
+  rctx.fillRect(cx - w / 2, cy - 18, w, 18);
+  rctx.fillStyle = '#8f6d4d';
+  rctx.fillRect(cx - w / 2, cy - 18, w, 1);
+  rctx.fillRect(cx - w / 2, cy - 1, w, 1);
+  rctx.fillRect(cx - w / 2, cy - 18, 1, 18);
+  rctx.fillRect(cx + w / 2 - 1, cy - 18, 1, 18);
+  rctx.fillStyle = '#4b3528';
+  rctx.fillText(display, cx, cy - 3);
+  rctx.restore();
+}
+
+function applyRoomModePayload(payload) {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    if (payload.groupId) {
+      enterGroupMode(payload.groupId, payload.groupName);
+      return;
+    }
+    exitGroupMode(payload.mode || 'edit');
+  } else if (typeof payload === 'string') {
+    exitGroupMode(payload);
+  }
+}
+
 // ═══════ INIT ═══════
 setupRoomPicker();
 setupPalette();
-loadRoom(currentRoom);
-loadMochiPos();
-mochiPlay('idle');
-setRoomMode(new URLSearchParams(window.location.search).get('mode') || 'edit');
-window.electronAPI?.onSetRoomMode?.(setRoomMode);
+const urlParams = new URLSearchParams(window.location.search);
+const urlGroupId = sanitizeGroupIdClient(urlParams.get('groupId') || '');
+const urlGroupName = urlParams.get('groupName') || '';
+if (urlGroupId) {
+  enterGroupMode(urlGroupId, urlGroupName);
+  mochiPlay('idle');
+} else {
+  loadRoom(currentRoom);
+  loadMochiPos();
+  mochiPlay('idle');
+  setRoomMode(urlParams.get('mode') || 'edit');
+}
+window.electronAPI?.onSetRoomMode?.(applyRoomModePayload);
+window.electronAPI?.onGroupEvent?.(handleRoomGroupEvent);
 requestAnimationFrame(render);
 </script>
 </body>

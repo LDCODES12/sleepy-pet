@@ -588,6 +588,115 @@
       color: #8a4a2d;
       background: #ffe1b8;
     }
+
+    /* -- Groups -- */
+    #groups-panel { width: 236px; }
+    .group-list-label { margin-top: 10px; display: block; }
+    .group-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 160px;
+      overflow-y: auto;
+      margin-top: 4px;
+    }
+    .group-list::-webkit-scrollbar { width: 6px; }
+    .group-list::-webkit-scrollbar-thumb { background: #c2ae86; border-radius: 3px; }
+    .group-row {
+      display: grid;
+      grid-template-columns: 1fr 44px 44px;
+      gap: 4px;
+      align-items: center;
+      background: #f2e2bc;
+      padding: 5px 6px;
+      box-shadow: 0 0 0 1px #c2ae86;
+    }
+    .group-row .g-name {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 10px;
+      font-weight: 900;
+      color: #4b3528;
+      line-height: 1.2;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .group-row .g-code {
+      font-size: 8px;
+      color: #8f6d4d;
+      font-weight: 900;
+      letter-spacing: 0.4px;
+      margin-top: 1px;
+    }
+    .group-row button {
+      height: 22px;
+      border: 0;
+      border-radius: 0;
+      cursor: pointer;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 9px;
+      font-weight: 900;
+      color: #4b3528;
+      background: #d6c08b;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 0 0 2px #fff2cf,
+        1px 1px 0 #2d2524;
+    }
+    .group-row button.g-enter { background: #ffd96b; }
+    .group-row button:hover { background: #fff2cf; transform: translateY(-1px); }
+    .group-row button:active { transform: translate(1px, 1px); }
+    .group-list-empty {
+      font-size: 9px;
+      color: #6f5643;
+      font-weight: 900;
+      padding: 6px 4px;
+    }
+
+    /* -- Group chat (mini & room) -- */
+    #group-chat-wrap {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      bottom: 8px;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      pointer-events: auto;
+      z-index: 30;
+    }
+    #group-chat-wrap.open { display: flex; }
+    #group-chat-input-row {
+      display: grid;
+      grid-template-columns: 1fr 52px;
+      gap: 4px;
+    }
+    #group-chat-input {
+      border: 0; border-radius: 0;
+      background: #fff7df;
+      color: #4b3528;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 4px 6px;
+      outline: none;
+      box-shadow:
+        0 0 0 1px #8f6d4d,
+        inset 0 -2px 0 #d6c08b;
+    }
+    #group-chat-send {
+      height: 22px;
+      border: 0; border-radius: 0;
+      cursor: pointer;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 9px; font-weight: 900;
+      color: #4b3528;
+      background: #ffd96b;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 0 0 2px #fff2a1,
+        1px 1px 0 #8f6d4d;
+    }
   </style>
 </head>
 <body>
@@ -610,6 +719,7 @@
     <button class="menu-btn" data-action="room">Edit Room</button>
     <button class="menu-btn" data-action="viewroom" id="viewroom-btn">View Room</button>
     <button class="menu-btn" data-action="messages">Messages</button>
+    <button class="menu-btn" data-action="groups">Groups</button>
     <button class="menu-btn" data-action="inv">Inventory</button>
     <button class="menu-btn" data-action="follow" id="follow-btn">Follow Mouse</button>
     <button class="menu-btn" data-action="hide">Hide Mochi</button>
@@ -676,11 +786,30 @@
     <input class="msg-input" id="message-relay-url" maxlength="120" spellcheck="false">
   </div>
 
+  <!-- Groups -->
+  <div class="panel" id="groups-panel">
+    <div class="panel-header"><h3>Groups</h3><button class="panel-close" data-panel="groups-panel">&times;</button></div>
+    <span class="lbl">New group name</span>
+    <input class="msg-input" id="group-create-name" maxlength="40" spellcheck="false" placeholder="e.g. Study Crew">
+    <div class="msg-actions">
+      <button class="msg-send-btn" id="group-create-btn">Create</button>
+      <button class="msg-small-btn" id="group-refresh-btn">Refresh</button>
+    </div>
+    <span class="lbl">Join with code</span>
+    <input class="msg-input msg-code" id="group-join-code" maxlength="32" spellcheck="false">
+    <div class="msg-actions">
+      <button class="msg-send-btn" id="group-join-btn">Join</button>
+    </div>
+    <div class="group-list-label lbl">Your groups</div>
+    <div class="group-list" id="group-list"></div>
+    <div class="msg-status" id="group-status">Groups share presence and chat.</div>
+  </div>
+
   <script>
     // ═══════ MOUSE CLICK-THROUGH ═══════
     // Window ignores mouse by default. When mouse enters visible content,
     // we tell main process to stop ignoring so we can interact.
-    const interactiveEls = ['cat-canvas', 'room-view-wrap', 'menu', 'settings-panel', 'inv-panel', 'messages-panel'];
+    const interactiveEls = ['cat-canvas', 'room-view-wrap', 'menu', 'settings-panel', 'inv-panel', 'messages-panel', 'groups-panel'];
 
     function setupClickThrough() {
       for (const id of interactiveEls) {
@@ -1367,6 +1496,15 @@
     }
 
     // ═══════ GOODNIGHT CUTSCENE ═══════
+    function notifyCatStateChanged() {
+      try {
+        window.electronAPI?.updateCatState?.({
+          catState: state,
+          catSleeping: manualSleep
+        });
+      } catch {}
+    }
+
     function goodnightCutscene() {
       manualSleep = true;
       clearTimeout(idleTimer);
@@ -1397,9 +1535,11 @@
           // Step 3: Sleep
           play('sleep');
           state = 'sleeping';
+          notifyCatStateChanged();
           document.getElementById('goodnight-btn').textContent = 'Wake Up';
         });
       });
+      notifyCatStateChanged();
     }
 
     function wakeUp() {
@@ -1409,14 +1549,17 @@
         state = 'awake';
         play(defaultIdle());
         scheduleCycleAnim();
+        notifyCatStateChanged();
       });
       document.getElementById('goodnight-btn').textContent = 'Goodnight';
       showBubbleMsg("good morning~");
+      notifyCatStateChanged();
     }
 
     function setState(s) {
       if (s === state) return;
       state = s;
+      notifyCatStateChanged();
       switch (s) {
         case 'awake':
           play(defaultIdle());
@@ -1675,6 +1818,8 @@
       }).catch((error) => {
         messageStatus('Relay setup failed: ' + String(error?.message || error), true);
       });
+      // Keep groups in sync with the same profile info (cat name, appearance, user id).
+      if (typeof pushGroupsConfig === 'function') pushGroupsConfig();
     }
 
     function setupMessages() {
@@ -1773,6 +1918,288 @@
         if (sendBtn) sendBtn.disabled = false;
         if (previewBtn) previewBtn.disabled = false;
       });
+    }
+
+    // ═══════ GROUPS ═══════
+    const GROUP_ID_MAX = 32;
+    const GROUP_NAME_MAX = 40;
+    const GROUP_CHAT_MAX = 180;
+    const GROUP_MEMBER_STALE_MS = 60000; // 60s — >4 missed heartbeats
+    let groupsList = [];
+    let groupActiveId = null;
+    const groupMembers = new Map(); // groupId -> Map<userId, {catName, appearance, catState, catSleeping, mode, lastSeen, manualSleep}>
+    const groupChat = new Map(); // groupId -> Array<{id, userId, catName, text, sentAt, isOwn}>
+    const groupBubbleTimers = new Map(); // `${groupId}:${userId}` -> {text, until}
+    let groupJoinInFlight = false;
+    let groupCreateInFlight = false;
+    let groupSendInFlight = false;
+
+    function sanitizeGroupIdClient(id) {
+      return String(id || '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9-]/g, '')
+        .slice(0, GROUP_ID_MAX);
+    }
+
+    function sanitizeGroupNameClient(name) {
+      return String(name || '').trim().slice(0, GROUP_NAME_MAX);
+    }
+
+    function randomGroupId() {
+      return randomMessageCodePart(4) + '-' + randomMessageCodePart(4) + '-' + randomMessageCodePart(4);
+    }
+
+    function loadGroupsFromStorage() {
+      try {
+        const raw = localStorage.getItem('groups');
+        const arr = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(arr)) return [];
+        return arr.map(g => ({
+          id: sanitizeGroupIdClient(g?.id),
+          name: sanitizeGroupNameClient(g?.name) || 'Group'
+        })).filter(g => g.id);
+      } catch { return []; }
+    }
+
+    function saveGroupsToStorage() {
+      localStorage.setItem('groups', JSON.stringify(groupsList));
+    }
+
+    function groupStatus(text, warn = false) {
+      const el = document.getElementById('group-status');
+      if (!el) return;
+      el.textContent = text;
+      el.classList.toggle('warn', warn);
+    }
+
+    function getGroupMembers(groupId) {
+      if (!groupMembers.has(groupId)) groupMembers.set(groupId, new Map());
+      return groupMembers.get(groupId);
+    }
+
+    function getGroupChat(groupId) {
+      if (!groupChat.has(groupId)) groupChat.set(groupId, []);
+      return groupChat.get(groupId);
+    }
+
+    function pruneGroupMembers(groupId) {
+      // Members never removed — offline shown as 'away'. Just return current map.
+      return getGroupMembers(groupId);
+    }
+
+    function renderGroupList() {
+      const el = document.getElementById('group-list');
+      if (!el) return;
+      el.innerHTML = '';
+      if (groupsList.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'group-list-empty';
+        empty.textContent = 'No groups yet. Create one or join with a code.';
+        el.appendChild(empty);
+        return;
+      }
+      for (const g of groupsList) {
+        const row = document.createElement('div');
+        row.className = 'group-row';
+        const info = document.createElement('div');
+        info.style.minWidth = '0';
+        const name = document.createElement('div');
+        name.className = 'g-name';
+        name.textContent = g.name;
+        const code = document.createElement('div');
+        code.className = 'g-code';
+        code.textContent = g.id;
+        info.appendChild(name);
+        info.appendChild(code);
+        const enter = document.createElement('button');
+        enter.className = 'g-enter';
+        enter.textContent = 'Enter';
+        enter.onclick = () => enterGroupRoom(g.id);
+        const leave = document.createElement('button');
+        leave.textContent = 'Leave';
+        leave.onclick = () => leaveGroup(g.id);
+        row.appendChild(info);
+        row.appendChild(enter);
+        row.appendChild(leave);
+        el.appendChild(row);
+      }
+    }
+
+    function groupsConfigPayload() {
+      const profile = messageProfile();
+      return {
+        groups: groupsList.map(g => ({ id: g.id, name: g.name })),
+        userId: profile.userId,
+        catName: profile.catName,
+        appearance: profile.appearance,
+        catState: state,
+        catSleeping: manualSleep
+      };
+    }
+
+    function pushGroupsConfig() {
+      if (!window.electronAPI?.configureGroups) return Promise.resolve({ ok: false });
+      return window.electronAPI.configureGroups(groupsConfigPayload()).catch((e) => {
+        groupStatus('Groups setup failed: ' + String(e?.message || e), true);
+        return { ok: false };
+      });
+    }
+
+    function createGroup() {
+      if (groupCreateInFlight) return;
+      const nameEl = document.getElementById('group-create-name');
+      const name = sanitizeGroupNameClient(nameEl?.value || '');
+      if (!name) { groupStatus('Pick a group name first.', true); return; }
+      if (groupsList.length >= 24) { groupStatus('Too many groups.', true); return; }
+      const id = randomGroupId();
+      groupCreateInFlight = true;
+      groupsList = [...groupsList, { id, name }];
+      saveGroupsToStorage();
+      renderGroupList();
+      pushGroupsConfig().then((r) => {
+        if (r?.ok) {
+          groupStatus('Created ' + name + ' — share code ' + id + '.');
+          if (nameEl) nameEl.value = '';
+          try { navigator.clipboard?.writeText(id); } catch {}
+        } else {
+          groupStatus('Created locally. Relay offline — presence will sync when it returns.');
+        }
+      }).finally(() => { groupCreateInFlight = false; });
+    }
+
+    function joinGroup() {
+      if (groupJoinInFlight) return;
+      const codeEl = document.getElementById('group-join-code');
+      const id = sanitizeGroupIdClient(codeEl?.value || '');
+      if (!id) { groupStatus('Paste a group code.', true); return; }
+      if (groupsList.some(g => g.id === id)) { groupStatus('Already in that group.'); return; }
+      if (groupsList.length >= 24) { groupStatus('Too many groups.', true); return; }
+      groupJoinInFlight = true;
+      groupsList = [...groupsList, { id, name: id }];
+      saveGroupsToStorage();
+      renderGroupList();
+      pushGroupsConfig().then((r) => {
+        if (r?.ok) {
+          groupStatus('Joined ' + id + '. Listening for members...');
+          if (codeEl) codeEl.value = '';
+        } else {
+          groupStatus('Joined locally. Relay offline — will sync when it returns.');
+        }
+      }).finally(() => { groupJoinInFlight = false; });
+    }
+
+    function leaveGroup(groupId) {
+      const id = sanitizeGroupIdClient(groupId);
+      if (!id) return;
+      groupsList = groupsList.filter(g => g.id !== id);
+      saveGroupsToStorage();
+      groupMembers.delete(id);
+      groupChat.delete(id);
+      if (groupActiveId === id) groupActiveId = null;
+      renderGroupList();
+      pushGroupsConfig().then(() => {
+        groupStatus('Left group.');
+      });
+    }
+
+    function enterGroupRoom(groupId) {
+      const id = sanitizeGroupIdClient(groupId);
+      const g = groupsList.find(x => x.id === id);
+      if (!g) return;
+      groupActiveId = id;
+      closePanel();
+      window.electronAPI?.openGroupRoom?.({ groupId: g.id, groupName: g.name });
+    }
+
+    function queueGroupBubble(groupId, userId, text) {
+      const key = groupId + ':' + userId;
+      groupBubbleTimers.set(key, { text, until: Date.now() + 4200 });
+    }
+
+    function handleGroupEvent(event) {
+      if (!event || typeof event !== 'object') return;
+      const groupId = sanitizeGroupIdClient(event.groupId);
+      if (!groupId || !groupsList.some(g => g.id === groupId)) return;
+      const payload = event.payload || event;
+      if (event.kind === 'group-presence') {
+        const members = getGroupMembers(groupId);
+        const from = payload.from || {};
+        const userId = String(from.id || '').slice(0, 64);
+        if (!userId) return;
+        const prev = members.get(userId) || {};
+        members.set(userId, {
+          catName: String(from.catName || 'Mochi').slice(0, 24),
+          appearance: from.appearance || {},
+          catState: String(payload.catState || payload.state || 'awake').slice(0, 24),
+          catSleeping: typeof payload.catSleeping === 'boolean' ? payload.catSleeping : !!payload.sleeping,
+          lastSeen: Date.now(),
+          isOwn: !!event.isOwn,
+          // Preserve prior bubble if still showing
+          mode: prev.mode || null
+        });
+      } else if (event.kind === 'group-chat') {
+        const from = payload.from || {};
+        const userId = String(from.id || '').slice(0, 64);
+        const text = String(payload.text || '').slice(0, GROUP_CHAT_MAX);
+        if (!userId || !text) return;
+        const chat = getGroupChat(groupId);
+        if (payload.id && chat.some(message => message.id === payload.id)) return;
+        chat.push({
+          id: payload.id || ('c-' + Date.now()),
+          userId,
+          catName: String(from.catName || 'Mochi').slice(0, 24),
+          text,
+          sentAt: payload.sentAt || new Date().toISOString(),
+          isOwn: !!event.isOwn,
+          appearance: from.appearance || {}
+        });
+        if (chat.length > 60) chat.splice(0, chat.length - 60);
+        queueGroupBubble(groupId, userId, text);
+      }
+    }
+
+    function setupGroups() {
+      groupsList = loadGroupsFromStorage();
+      renderGroupList();
+
+      const createBtn = document.getElementById('group-create-btn');
+      const joinBtn = document.getElementById('group-join-btn');
+      const refreshBtn = document.getElementById('group-refresh-btn');
+      const joinCode = document.getElementById('group-join-code');
+      if (createBtn) createBtn.onclick = () => createGroup();
+      if (joinBtn) joinBtn.onclick = () => joinGroup();
+      if (refreshBtn) refreshBtn.onclick = () => { pushGroupsConfig(); groupStatus('Reconnected.'); };
+      if (joinCode) joinCode.oninput = () => {
+        const clean = sanitizeGroupIdClient(joinCode.value);
+        if (joinCode.value !== clean) joinCode.value = clean;
+      };
+
+      window.electronAPI?.onGroupEvent?.((event) => handleGroupEvent(event));
+
+      pushGroupsConfig();
+    }
+
+    function sendActiveGroupMessage(text) {
+      if (!groupActiveId) return Promise.resolve({ ok: false, error: 'No active group.' });
+      if (groupSendInFlight) return Promise.resolve({ ok: false, error: 'Slow down.' });
+      const clean = String(text || '').trim().slice(0, GROUP_CHAT_MAX);
+      if (!clean) return Promise.resolve({ ok: false, error: 'Type a message.' });
+      groupSendInFlight = true;
+      const profile = messageProfile();
+      const optimistic = {
+        id: 'local-' + Date.now().toString(36),
+        userId: profile.userId,
+        catName: profile.catName,
+        text: clean,
+        sentAt: new Date().toISOString(),
+        isOwn: true,
+        appearance: profile.appearance
+      };
+      getGroupChat(groupActiveId).push(optimistic);
+      queueGroupBubble(groupActiveId, profile.userId, clean);
+      return window.electronAPI.sendGroupMessage({ groupId: groupActiveId, text: clean })
+        .catch((e) => ({ ok: false, error: String(e?.message || e) }))
+        .finally(() => { groupSendInFlight = false; });
     }
 
     // ═══════ MINI ROOM VIEW ═══════
@@ -3559,8 +3986,10 @@
 
       setupInventory();
       setupMessages();
+      setupGroups();
       updateSleepInfo();
       updateInvPreview();
+      notifyCatStateChanged();
       canvas.classList.toggle('follow-mode', followingMouse);
 
       // Restore follow-mouse state

@@ -58,6 +58,32 @@ const PET_MESSAGE_DEFAULT_RELAY_URL = 'https://ntfy.sh';
 const PET_MESSAGE_NTFY_CATCHUP = '10m';
 const PET_MESSAGE_TOPIC_PREFIX = 'sleepy-pet-';
 
+// ── Group rooms ──
+const GROUP_TOPIC_PREFIX = 'sleepy-pet-group-';
+const GROUP_HEARTBEAT_INTERVAL_MS = 15000;
+const GROUP_MESSAGE_MAX_TEXT = 180;
+const GROUP_NAME_MAX = 40;
+const GROUP_ID_MAX = 32;
+const GROUP_CACHE_MAX_CHAT = 80;
+const GROUP_CACHE_MAX_MEMBERS = 80;
+let groupConfig = {
+  groups: [],
+  userId: null,
+  catName: 'Mochi',
+  appearance: {},
+  catState: 'awake',
+  catSleeping: false
+};
+const groupStreams = new Map(); // groupId -> { controller, restartTimer }
+const groupSeenMessageIds = new Set();
+const groupPresenceCache = new Map(); // groupId -> Map<userId, member>
+const groupChatCache = new Map(); // groupId -> Array<message>
+const groupRoomPositions = new Map(); // groupId -> { x, y, updatedAt }
+let groupHeartbeatTimer = null;
+let groupCacheLoaded = false;
+let groupCacheSaveTimer = null;
+let currentRoomContext = { mode: 'edit', groupId: null, groupName: null };
+
 app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
   createWindow();
@@ -301,18 +327,29 @@ function resetPosition() {
   mainWindow?.setPosition(width - WIN_W - 10, height - WIN_H - 10);
 }
 
-function createRoomWindow(initialMode = 'edit') {
+function createRoomWindow(initialMode = 'edit', options = {}) {
   const mode = initialMode === 'play' ? 'play' : 'edit';
+  const groupId = options.groupId ? sanitizeGroupId(options.groupId) : null;
+  const groupName = options.groupName
+    ? sanitizeText(options.groupName, GROUP_NAME_MAX) || null
+    : null;
+
   if (roomWindow) {
     roomWindow.focus();
-    roomWindow.webContents.send('set-room-mode', mode);
+    currentRoomContext = { mode, groupId, groupName };
+    roomWindow.setTitle(groupId ? `${groupName || 'Group'} — Sleepy Pet` : "Mochi's Room");
+    roomWindow.webContents.send('set-room-mode', { mode, groupId, groupName });
     return;
   }
+
+  const title = groupId
+    ? `${groupName || 'Group'} — Sleepy Pet`
+    : "Mochi's Room";
 
   roomWindow = new BrowserWindow({
     width: 900,
     height: 650,
-    title: "Mochi's Room",
+    title,
     resizable: true,
     fullscreenable: false,
     webPreferences: {
@@ -322,8 +359,15 @@ function createRoomWindow(initialMode = 'edit') {
     }
   });
 
-  roomWindow.loadFile('room.html', { query: { mode } });
-  roomWindow.on('closed', () => { roomWindow = null; });
+  currentRoomContext = { mode, groupId, groupName };
+  const query = { mode };
+  if (groupId) query.groupId = groupId;
+  if (groupName) query.groupName = groupName;
+  roomWindow.loadFile('room.html', { query });
+  roomWindow.on('closed', () => {
+    roomWindow = null;
+    currentRoomContext = { mode: 'edit', groupId: null, groupName: null };
+  });
 }
 
 // Follow-mouse feature
@@ -860,6 +904,447 @@ async function sendPetMessage(payload) {
   }
 }
 
+// ═══════ GROUP ROOMS ═══════
+function sanitizeGroupId(id) {
+  return String(id || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .slice(0, GROUP_ID_MAX);
+}
+
+function groupTopicForId(id) {
+  const safe = sanitizeGroupId(id).toLowerCase();
+  return `${GROUP_TOPIC_PREFIX}${safe}`.slice(0, 64);
+}
+
+function groupTopicUrl(id, format = '') {
+  if (!petMessageConfig.relayUrl) return null;
+  const base = petMessageConfig.relayUrl.endsWith('/')
+    ? petMessageConfig.relayUrl
+    : `${petMessageConfig.relayUrl}/`;
+  const topic = groupTopicForId(id);
+  if (!topic) return null;
+  return new URL(`${encodeURIComponent(topic)}${format}`, base);
+}
+
+function groupCachePath() {
+  try {
+    return path.join(app.getPath('userData'), 'group-cache.json');
+  } catch {
+    return null;
+  }
+}
+
+function getGroupPresence(groupId) {
+  const id = sanitizeGroupId(groupId);
+  if (!groupPresenceCache.has(id)) groupPresenceCache.set(id, new Map());
+  return groupPresenceCache.get(id);
+}
+
+function getGroupChat(groupId) {
+  const id = sanitizeGroupId(groupId);
+  if (!groupChatCache.has(id)) groupChatCache.set(id, []);
+  return groupChatCache.get(id);
+}
+
+function loadGroupCacheOnce() {
+  if (groupCacheLoaded) return;
+  groupCacheLoaded = true;
+  const file = groupCachePath();
+  if (!file) return;
+  try {
+    const raw = fs.readFileSync(file, 'utf8');
+    const parsed = JSON.parse(raw);
+    const members = parsed?.members && typeof parsed.members === 'object' ? parsed.members : {};
+    for (const [rawGroupId, rawMembers] of Object.entries(members)) {
+      const groupId = sanitizeGroupId(rawGroupId);
+      if (!groupId || !rawMembers || typeof rawMembers !== 'object') continue;
+      const groupMap = getGroupPresence(groupId);
+      for (const [rawUserId, rawMember] of Object.entries(rawMembers)) {
+        const userId = sanitizeMessageId(rawUserId);
+        if (!userId) continue;
+        groupMap.set(userId, {
+          userId,
+          catName: sanitizeText(rawMember?.catName || 'Mochi', PET_MESSAGE_MAX_NAME) || 'Mochi',
+          appearance: sanitizeAppearance(rawMember?.appearance),
+          catState: sanitizeText(rawMember?.catState || 'awake', 24) || 'awake',
+          catSleeping: !!rawMember?.catSleeping,
+          lastSeen: Number(rawMember?.lastSeen) || 0,
+          sentAt: sanitizeText(rawMember?.sentAt, 40) || null,
+          roomX: Number.isFinite(Number(rawMember?.roomX)) ? Number(rawMember.roomX) : null,
+          roomY: Number.isFinite(Number(rawMember?.roomY)) ? Number(rawMember.roomY) : null
+        });
+      }
+    }
+
+    const chat = parsed?.chat && typeof parsed.chat === 'object' ? parsed.chat : {};
+    for (const [rawGroupId, rawMessages] of Object.entries(chat)) {
+      const groupId = sanitizeGroupId(rawGroupId);
+      if (!groupId || !Array.isArray(rawMessages)) continue;
+      const arr = getGroupChat(groupId);
+      for (const rawMessage of rawMessages.slice(-GROUP_CACHE_MAX_CHAT)) {
+        const id = sanitizeMessageId(rawMessage?.id);
+        const userId = sanitizeMessageId(rawMessage?.userId || rawMessage?.from?.id);
+        const text = sanitizeText(rawMessage?.text, GROUP_MESSAGE_MAX_TEXT);
+        if (!id || !userId || !text) continue;
+        arr.push({
+          id,
+          userId,
+          catName: sanitizeText(rawMessage?.catName || rawMessage?.from?.catName || 'Mochi', PET_MESSAGE_MAX_NAME) || 'Mochi',
+          appearance: sanitizeAppearance(rawMessage?.appearance || rawMessage?.from?.appearance),
+          text,
+          sentAt: sanitizeText(rawMessage?.sentAt, 40) || new Date().toISOString(),
+          isOwn: !!rawMessage?.isOwn
+        });
+        rememberGroupMessageId(groupId, id);
+      }
+    }
+  } catch {
+    // A corrupt cache should never stop group rooms from working live.
+  }
+}
+
+function saveGroupCacheNow() {
+  if (!groupCacheLoaded) return;
+  const file = groupCachePath();
+  if (!file) return;
+  const members = {};
+  for (const [groupId, map] of groupPresenceCache.entries()) {
+    const entries = Array.from(map.entries())
+      .sort((a, b) => (b[1].lastSeen || 0) - (a[1].lastSeen || 0))
+      .slice(0, GROUP_CACHE_MAX_MEMBERS);
+    members[groupId] = Object.fromEntries(entries);
+  }
+  const chat = {};
+  for (const [groupId, messages] of groupChatCache.entries()) {
+    chat[groupId] = messages.slice(-GROUP_CACHE_MAX_CHAT);
+  }
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ version: 1, members, chat }, null, 2));
+  } catch {
+    // Best-effort cache only.
+  }
+}
+
+function scheduleGroupCacheSave() {
+  if (!groupCacheLoaded) return;
+  if (groupCacheSaveTimer) clearTimeout(groupCacheSaveTimer);
+  groupCacheSaveTimer = setTimeout(() => {
+    groupCacheSaveTimer = null;
+    saveGroupCacheNow();
+  }, 500);
+}
+
+function buildGroupEvent(kind, groupId, payload, isOwn = false) {
+  return {
+    kind,
+    groupId: sanitizeGroupId(groupId),
+    payload,
+    isOwn: !!isOwn
+  };
+}
+
+function storeGroupPresenceEvent(event) {
+  const groupId = sanitizeGroupId(event?.groupId);
+  const payload = event?.payload || {};
+  const userId = sanitizeMessageId(payload.from?.id);
+  if (!groupId || !userId) return;
+  const members = getGroupPresence(groupId);
+  members.set(userId, {
+    userId,
+    catName: sanitizeText(payload.from?.catName || 'Mochi', PET_MESSAGE_MAX_NAME) || 'Mochi',
+    appearance: sanitizeAppearance(payload.from?.appearance),
+    catState: sanitizeText(payload.catState || 'awake', 24) || 'awake',
+    catSleeping: !!payload.catSleeping,
+    lastSeen: Date.now(),
+    sentAt: sanitizeText(payload.sentAt, 40) || new Date().toISOString(),
+    roomX: Number.isFinite(Number(payload.roomX)) ? Number(payload.roomX) : null,
+    roomY: Number.isFinite(Number(payload.roomY)) ? Number(payload.roomY) : null
+  });
+  scheduleGroupCacheSave();
+}
+
+function storeGroupChatEvent(event) {
+  const groupId = sanitizeGroupId(event?.groupId);
+  const payload = event?.payload || {};
+  const id = sanitizeMessageId(payload.id);
+  const userId = sanitizeMessageId(payload.from?.id);
+  const text = sanitizeText(payload.text, GROUP_MESSAGE_MAX_TEXT);
+  if (!groupId || !id || !userId || !text) return;
+  const chat = getGroupChat(groupId);
+  if (chat.some(message => message.id === id)) return;
+  chat.push({
+    id,
+    userId,
+    catName: sanitizeText(payload.from?.catName || 'Mochi', PET_MESSAGE_MAX_NAME) || 'Mochi',
+    appearance: sanitizeAppearance(payload.from?.appearance),
+    text,
+    sentAt: sanitizeText(payload.sentAt, 40) || new Date().toISOString(),
+    isOwn: !!event.isOwn
+  });
+  if (chat.length > GROUP_CACHE_MAX_CHAT) chat.splice(0, chat.length - GROUP_CACHE_MAX_CHAT);
+  scheduleGroupCacheSave();
+}
+
+function buildOwnGroupPresenceEvent(groupId) {
+  if (!groupConfig.userId) return null;
+  const roomPosition = groupRoomPositions.get(sanitizeGroupId(groupId));
+  return buildGroupEvent('group-presence', groupId, {
+    from: {
+      id: groupConfig.userId,
+      catName: groupConfig.catName,
+      appearance: sanitizeAppearance(groupConfig.appearance)
+    },
+    catState: groupConfig.catState || 'awake',
+    catSleeping: !!groupConfig.catSleeping,
+    sentAt: new Date().toISOString(),
+    ...(roomPosition ? { roomX: roomPosition.x, roomY: roomPosition.y } : {})
+  }, true);
+}
+
+function getGroupSnapshot(groupId) {
+  loadGroupCacheOnce();
+  const id = sanitizeGroupId(groupId);
+  if (!id || !groupConfig.groups.some(group => group.id === id)) {
+    return { ok: false, error: 'Group not found.' };
+  }
+
+  const ownEvent = buildOwnGroupPresenceEvent(id);
+  if (ownEvent) storeGroupPresenceEvent(ownEvent);
+
+  const members = Array.from(getGroupPresence(id).values()).map(member => ({
+    ...member,
+    isOwn: !!groupConfig.userId && member.userId === groupConfig.userId
+  }));
+  const messages = getGroupChat(id).map(message => ({
+    ...message,
+    isOwn: !!groupConfig.userId && message.userId === groupConfig.userId
+  }));
+  return {
+    ok: true,
+    groupId: id,
+    members,
+    messages,
+    now: Date.now()
+  };
+}
+
+function broadcastGroupEvent(payload) {
+  try {
+    mainWindow?.webContents.send('group-event', payload);
+  } catch { /* main window closed */ }
+  try {
+    if (roomWindow && !roomWindow.isDestroyed() && currentRoomContext.groupId === payload?.groupId) {
+      roomWindow.webContents.send('group-event', payload);
+    }
+  } catch { /* room window closed */ }
+}
+
+function groupMessageSeenKey(groupId, id) {
+  const safeGroupId = sanitizeGroupId(groupId);
+  const safeId = sanitizeMessageId(id);
+  return safeGroupId && safeId ? `${safeGroupId}:${safeId}` : '';
+}
+
+function rememberGroupMessageId(groupId, id) {
+  const key = groupMessageSeenKey(groupId, id);
+  if (!key) return;
+  groupSeenMessageIds.add(key);
+  if (groupSeenMessageIds.size <= 500) return;
+  const oldest = groupSeenMessageIds.values().next().value;
+  groupSeenMessageIds.delete(oldest);
+}
+
+function hasSeenGroupMessageId(groupId, id) {
+  const key = groupMessageSeenKey(groupId, id);
+  return !!key && groupSeenMessageIds.has(key);
+}
+
+function dispatchGroupPayload(groupId, payload) {
+  loadGroupCacheOnce();
+  if (!payload || typeof payload !== 'object') return;
+  const kind = String(payload.kind || '').slice(0, 40);
+  const rawFrom = payload.from || {};
+  const fromId = sanitizeMessageId(rawFrom.id || payload.fromId);
+  if (!fromId) return;
+  const isOwn = !!groupConfig.userId && fromId === groupConfig.userId;
+  const safeFrom = {
+    id: fromId,
+    catName: sanitizeText(rawFrom.catName || 'Mochi', PET_MESSAGE_MAX_NAME) || 'Mochi',
+    appearance: sanitizeAppearance(rawFrom.appearance)
+  };
+
+  if (kind === 'group-presence') {
+    const roomX = Number(payload.roomX);
+    const roomY = Number(payload.roomY);
+    const event = buildGroupEvent('group-presence', groupId, {
+      from: safeFrom,
+      catState: sanitizeText(payload.catState || payload.state, 24) || 'awake',
+      catSleeping: typeof payload.catSleeping === 'boolean' ? payload.catSleeping : !!payload.sleeping,
+      sentAt: sanitizeText(payload.sentAt, 40) || new Date().toISOString(),
+      ...(Number.isFinite(roomX) && Number.isFinite(roomY) ? { roomX, roomY } : {})
+    }, isOwn);
+    storeGroupPresenceEvent(event);
+    broadcastGroupEvent(event);
+    return;
+  }
+
+  if (kind === 'group-chat') {
+    const id = sanitizeMessageId(payload.id);
+    if (id && hasSeenGroupMessageId(groupId, id)) return;
+    if (id) rememberGroupMessageId(groupId, id);
+    const text = sanitizeText(payload.text, GROUP_MESSAGE_MAX_TEXT);
+    if (!text) return;
+    const event = buildGroupEvent('group-chat', groupId, {
+      id: id || makePetMessageId(),
+      from: safeFrom,
+      text,
+      sentAt: sanitizeText(payload.sentAt, 40) || new Date().toISOString()
+    }, isOwn);
+    storeGroupChatEvent(event);
+    broadcastGroupEvent(event);
+  }
+}
+
+function handleGroupStreamLine(groupId, line) {
+  if (!line) return;
+  let event;
+  try { event = JSON.parse(line); } catch { return; }
+  if (!event || event.event === 'open') return;
+  if (event.event !== 'message' || !event.message) return;
+  let payload;
+  try { payload = JSON.parse(event.message); } catch { return; }
+  dispatchGroupPayload(groupId, payload);
+}
+
+async function startGroupStream(groupId) {
+  stopGroupStream(groupId);
+  if (petMessageRelayKind() !== 'ntfy') return; // v1: only ntfy-style relays
+  const url = groupTopicUrl(groupId, '/json');
+  if (!url) return;
+  url.searchParams.set('since', PET_MESSAGE_NTFY_CATCHUP);
+
+  const controller = new AbortController();
+  const entry = { controller, restartTimer: null };
+  groupStreams.set(groupId, entry);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`Relay responded with ${response.status}`);
+    if (!response.body?.getReader) throw new Error('Relay stream is not available');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (!controller.signal.aborted) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      for (const line of lines) handleGroupStreamLine(groupId, line);
+    }
+  } catch { /* network error / abort — reconnect below */ }
+  finally {
+    const current = groupStreams.get(groupId);
+    const stillJoined = groupConfig.groups.some(g => g.id === groupId);
+    if (current === entry && !controller.signal.aborted && stillJoined) {
+      entry.restartTimer = setTimeout(() => startGroupStream(groupId), 4000);
+    } else if (current === entry) {
+      groupStreams.delete(groupId);
+    }
+  }
+}
+
+function stopGroupStream(groupId) {
+  const entry = groupStreams.get(groupId);
+  if (!entry) return;
+  try { entry.controller.abort(); } catch {}
+  if (entry.restartTimer) { clearTimeout(entry.restartTimer); entry.restartTimer = null; }
+  groupStreams.delete(groupId);
+}
+
+function stopAllGroupStreams() {
+  for (const id of Array.from(groupStreams.keys())) stopGroupStream(id);
+}
+
+async function publishGroupPayload(groupId, body) {
+  if (!petMessageConfig.relayUrl || petMessageRelayKind() !== 'ntfy') return false;
+  const url = groupTopicUrl(groupId);
+  if (!url) return false;
+  try {
+    await fetchPetMessageText(url, {
+      method: 'POST',
+      headers: {
+        title: String(body.from?.catName || 'Mochi').slice(0, 64),
+        tags: 'cat'
+      },
+      body: JSON.stringify(body)
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildGroupPresenceBody(groupId) {
+  const roomPosition = groupRoomPositions.get(sanitizeGroupId(groupId));
+  return {
+    kind: 'group-presence',
+    groupId,
+    from: {
+      id: groupConfig.userId,
+      catName: groupConfig.catName,
+      appearance: sanitizeAppearance(groupConfig.appearance)
+    },
+    catState: groupConfig.catState || 'awake',
+    catSleeping: !!groupConfig.catSleeping,
+    state: groupConfig.catState || 'awake',
+    sleeping: !!groupConfig.catSleeping,
+    sentAt: new Date().toISOString(),
+    ...(roomPosition ? { roomX: roomPosition.x, roomY: roomPosition.y } : {})
+  };
+}
+
+async function sendGroupHeartbeat(groupId) {
+  if (!groupConfig.userId) return;
+  if (!groupConfig.groups.some(g => g.id === groupId)) return;
+  await publishGroupPayload(groupId, buildGroupPresenceBody(groupId));
+}
+
+function pulseGroupHeartbeats() {
+  if (!groupConfig.userId) return;
+  for (const group of groupConfig.groups) {
+    sendGroupHeartbeat(group.id);
+  }
+}
+
+function startGroupHeartbeats() {
+  stopGroupHeartbeats();
+  if (!groupConfig.userId || groupConfig.groups.length === 0) return;
+  // Fire an immediate beat so new members see us quickly, then periodic.
+  pulseGroupHeartbeats();
+  groupHeartbeatTimer = setInterval(pulseGroupHeartbeats, GROUP_HEARTBEAT_INTERVAL_MS);
+}
+
+function stopGroupHeartbeats() {
+  if (groupHeartbeatTimer) {
+    clearInterval(groupHeartbeatTimer);
+    groupHeartbeatTimer = null;
+  }
+}
+
+function restartAllGroupStreams() {
+  const ids = groupConfig.groups.map(g => g.id);
+  for (const id of Array.from(groupStreams.keys())) {
+    if (!ids.includes(id)) stopGroupStream(id);
+  }
+  for (const id of ids) {
+    stopGroupStream(id);
+    startGroupStream(id);
+  }
+}
+
 function setFollowMouseEnabled(enabled) {
   const wasEnabled = followMouse;
   if (enabled === wasEnabled) {
@@ -910,6 +1395,7 @@ ipcMain.handle('configure-pet-messages', (_, config) => {
   const nextConfig = sanitizePetMessageConfig(config);
   const nextInboxKey = petMessageInboxKeyForConfig(nextConfig);
   const inboxChanged = nextInboxKey !== petMessageInboxKey;
+  const prevRelayUrl = petMessageConfig.relayUrl;
   petMessageConfig = nextConfig;
   petMessageInboxKey = nextInboxKey;
   if (inboxChanged) {
@@ -917,6 +1403,11 @@ ipcMain.handle('configure-pet-messages', (_, config) => {
     seenPetMessageIds.clear();
   }
   startPetMessagePolling();
+  // Group streams ride on the same relay — if it moved, restart them.
+  if (prevRelayUrl !== nextConfig.relayUrl && groupConfig.groups.length > 0) {
+    groupSeenMessageIds.clear();
+    restartAllGroupStreams();
+  }
   return {
     ok: true,
     relayEnabled: Boolean(petMessageConfig.relayUrl),
@@ -928,7 +1419,146 @@ ipcMain.handle('configure-pet-messages', (_, config) => {
 
 ipcMain.handle('send-pet-message', (_, payload) => sendPetMessage(payload));
 
+ipcMain.handle('configure-groups', (_, config) => {
+  loadGroupCacheOnce();
+  const rawGroups = Array.isArray(config?.groups) ? config.groups : [];
+  const nextGroups = [];
+  const seen = new Set();
+  for (const raw of rawGroups) {
+    const id = sanitizeGroupId(raw?.id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    nextGroups.push({
+      id,
+      name: sanitizeText(raw?.name, GROUP_NAME_MAX) || 'Group'
+    });
+  }
+
+  const userId = sanitizeMessageId(config?.userId) || groupConfig.userId || null;
+  const catName = sanitizeText(config?.catName || 'Mochi', PET_MESSAGE_MAX_NAME) || 'Mochi';
+  const appearance = sanitizeAppearance(config?.appearance);
+  const catState = sanitizeText(config?.catState, 24) || groupConfig.catState || 'awake';
+  const catSleeping = typeof config?.catSleeping === 'boolean'
+    ? config.catSleeping
+    : groupConfig.catSleeping;
+
+  const prevGroupIds = new Set(groupConfig.groups.map(g => g.id));
+  groupConfig = {
+    groups: nextGroups,
+    userId,
+    catName,
+    appearance,
+    catState,
+    catSleeping
+  };
+
+  // Stop streams for groups we left
+  for (const id of Array.from(groupStreams.keys())) {
+    if (!seen.has(id)) stopGroupStream(id);
+  }
+  // Start streams for new groups
+  for (const g of nextGroups) {
+    if (!prevGroupIds.has(g.id) || !groupStreams.has(g.id)) {
+      stopGroupStream(g.id);
+      startGroupStream(g.id);
+    }
+  }
+
+  if (nextGroups.length > 0 && userId) startGroupHeartbeats();
+  else stopGroupHeartbeats();
+
+  if (userId) {
+    for (const group of nextGroups) {
+      const ownEvent = buildOwnGroupPresenceEvent(group.id);
+      if (ownEvent) storeGroupPresenceEvent(ownEvent);
+    }
+  }
+
+  return { ok: true, groups: nextGroups };
+});
+
+ipcMain.handle('send-group-message', async (_, payload) => {
+  loadGroupCacheOnce();
+  const groupId = sanitizeGroupId(payload?.groupId);
+  const text = sanitizeText(payload?.text, GROUP_MESSAGE_MAX_TEXT);
+  if (!groupId || !groupConfig.groups.some(g => g.id === groupId)) {
+    return { ok: false, error: 'Group not found.' };
+  }
+  if (!text) return { ok: false, error: 'Write a message first.' };
+  if (!groupConfig.userId) return { ok: false, error: 'Profile not ready.' };
+  if (petMessageRelayKind() !== 'ntfy') {
+    return { ok: false, error: 'Groups need an ntfy relay.' };
+  }
+  const body = {
+    kind: 'group-chat',
+    groupId,
+    id: makePetMessageId(),
+    from: {
+      id: groupConfig.userId,
+      catName: groupConfig.catName,
+      appearance: sanitizeAppearance(groupConfig.appearance)
+    },
+    text,
+    sentAt: new Date().toISOString()
+  };
+  const ok = await publishGroupPayload(groupId, body);
+  if (!ok) return { ok: false, error: 'Could not reach the relay — try again.' };
+  // Remember own id so stream echo doesn't re-deliver
+  rememberGroupMessageId(groupId, body.id);
+  const event = buildGroupEvent('group-chat', groupId, {
+    id: body.id,
+    from: body.from,
+    text: body.text,
+    sentAt: body.sentAt
+  }, true);
+  storeGroupChatEvent(event);
+  return { ok: true, id: body.id, sentAt: body.sentAt, event };
+});
+
+ipcMain.handle('get-group-snapshot', (_, groupId) => getGroupSnapshot(groupId));
+
+ipcMain.on('update-group-room-presence', (_, payload = {}) => {
+  const groupId = sanitizeGroupId(payload.groupId);
+  const x = Number(payload.x);
+  const y = Number(payload.y);
+  if (!groupId || !Number.isFinite(x) || !Number.isFinite(y)) return;
+  groupRoomPositions.set(groupId, {
+    x: Math.max(0, Math.min(448, x)),
+    y: Math.max(0, Math.min(448, y)),
+    updatedAt: Date.now()
+  });
+});
+
+ipcMain.on('update-cat-state', (_, state = {}) => {
+  if (typeof state.catState === 'string') {
+    groupConfig.catState = state.catState.slice(0, 24) || 'awake';
+  }
+  if (typeof state.catSleeping === 'boolean') {
+    groupConfig.catSleeping = state.catSleeping;
+  }
+  const ownGroupIds = groupConfig.groups.map(group => group.id);
+  for (const groupId of ownGroupIds) {
+    const ownEvent = buildOwnGroupPresenceEvent(groupId);
+    if (ownEvent) {
+      storeGroupPresenceEvent(ownEvent);
+      broadcastGroupEvent(ownEvent);
+    }
+  }
+  pulseGroupHeartbeats();
+});
+
 ipcMain.on('open-room', (_, mode) => createRoomWindow(mode));
+ipcMain.on('open-group-room', (_, payload = {}) => {
+  const groupId = sanitizeGroupId(payload.groupId);
+  if (!groupId) return;
+  const groupName = payload.groupName
+    ? sanitizeText(payload.groupName, GROUP_NAME_MAX) || 'Group'
+    : 'Group';
+  createRoomWindow('play', { groupId, groupName });
+});
+ipcMain.on('close-room', () => {
+  if (roomWindow && !roomWindow.isDestroyed()) roomWindow.close();
+});
 ipcMain.on('quit-app', () => app.quit());
 ipcMain.on('hide-mochi', () => hideMochi());
 ipcMain.on('install-update-now', () => installUpdateNow());
@@ -938,6 +1568,10 @@ ipcMain.on('notify', (_, { title, body }) => {
 
 app.on('before-quit', () => {
   stopPetMessagePolling();
+  stopAllGroupStreams();
+  stopGroupHeartbeats();
+  if (groupCacheSaveTimer) { clearTimeout(groupCacheSaveTimer); groupCacheSaveTimer = null; }
+  saveGroupCacheNow();
   if (updateCheckTimer) { clearInterval(updateCheckTimer); updateCheckTimer = null; }
   macUpdater?.installOnQuit();
 });
