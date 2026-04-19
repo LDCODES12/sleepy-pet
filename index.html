@@ -701,6 +701,56 @@
       font-weight: 900;
       padding: 6px 4px;
     }
+    #room-view-panel { width: 224px; }
+    .room-choice-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-top: 6px;
+    }
+    .room-choice-row {
+      display: grid;
+      grid-template-columns: 1fr 54px;
+      gap: 6px;
+      align-items: center;
+      background: #f2e2bc;
+      padding: 6px;
+      box-shadow: 0 0 0 1px #c2ae86;
+    }
+    .room-choice-name {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 10px;
+      font-weight: 900;
+      color: #4b3528;
+    }
+    .room-choice-code {
+      margin-top: 1px;
+      font-size: 8px;
+      font-weight: 900;
+      color: #8f6d4d;
+      letter-spacing: 0.4px;
+    }
+    .room-choice-row button {
+      height: 23px;
+      border: 0;
+      border-radius: 0;
+      cursor: pointer;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 9px;
+      font-weight: 900;
+      color: #4b3528;
+      background: #ffd96b;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 0 0 2px #fff2a1,
+        1px 1px 0 #8f6d4d;
+    }
+    .room-choice-row button:hover { background: #fff2cf; transform: translateY(-1px); }
+    .room-choice-row button:active { transform: translate(1px, 1px); }
 
     /* -- Group chat (mini & room) -- */
     #group-chat-wrap {
@@ -856,11 +906,18 @@
     <div class="msg-status" id="group-status">Groups share presence and chat.</div>
   </div>
 
+  <!-- Room chooser -->
+  <div class="panel" id="room-view-panel">
+    <div class="panel-header"><h3>View Room</h3><button class="panel-close" data-panel="room-view-panel">&times;</button></div>
+    <div class="room-choice-list" id="room-choice-list"></div>
+    <div class="msg-status" id="room-choice-status">Pick your room or a group room.</div>
+  </div>
+
   <script>
     // ═══════ MOUSE CLICK-THROUGH ═══════
     // Window ignores mouse by default. When mouse enters visible content,
     // we tell main process to stop ignoring so we can interact.
-    const interactiveEls = ['cat-canvas', 'room-view-wrap', 'menu', 'settings-panel', 'inv-panel', 'messages-panel', 'groups-panel'];
+    const interactiveEls = ['cat-canvas', 'room-view-wrap', 'menu', 'settings-panel', 'inv-panel', 'messages-panel', 'groups-panel', 'room-view-panel'];
 
     function setupClickThrough() {
       for (const id of interactiveEls) {
@@ -1679,7 +1736,7 @@
             localStorage.setItem('showRoom', 'true');
             roomViewWrap.classList.add('show');
             canvas.style.display = 'none';
-            document.getElementById('viewroom-btn').textContent = 'Hide Room';
+            document.getElementById('viewroom-btn').textContent = 'View Room';
             loadRoomView();
           }
           // Step 3: Sleep
@@ -2192,8 +2249,8 @@
         info.appendChild(code);
         const enter = document.createElement('button');
         enter.className = 'g-enter';
-        enter.textContent = 'Enter';
-        enter.onclick = () => enterGroupRoom(g.id);
+        enter.textContent = 'View';
+        enter.onclick = () => openGroupRoomFromMenu(g.id, 'edit');
         const leave = document.createElement('button');
         leave.textContent = 'Leave';
         leave.onclick = () => leaveGroup(g.id);
@@ -2281,13 +2338,67 @@
       });
     }
 
-    function enterGroupRoom(groupId) {
+    function openGroupRoomFromMenu(groupId, mode = 'edit') {
       const id = sanitizeGroupIdClient(groupId);
       const g = groupsList.find(x => x.id === id);
       if (!g) return;
       groupActiveId = id;
       closePanel();
-      window.electronAPI?.openGroupRoom?.({ groupId: g.id, groupName: g.name });
+      window.electronAPI?.openGroupRoom?.({ groupId: g.id, groupName: g.name, mode });
+    }
+
+    function renderRoomChoices() {
+      const list = document.getElementById('room-choice-list');
+      if (!list) return;
+      list.innerHTML = '';
+
+      const ownRow = document.createElement('div');
+      ownRow.className = 'room-choice-row';
+      const ownInfo = document.createElement('div');
+      const ownName = document.createElement('div');
+      ownName.className = 'room-choice-name';
+      ownName.textContent = 'My room';
+      const ownCode = document.createElement('div');
+      ownCode.className = 'room-choice-code';
+      ownCode.textContent = 'private';
+      ownInfo.appendChild(ownName);
+      ownInfo.appendChild(ownCode);
+      const ownBtn = document.createElement('button');
+      ownBtn.textContent = 'View';
+      ownBtn.onclick = () => {
+        closePanel();
+        if (showingRoom) toggleRoomView();
+        window.electronAPI?.openRoom?.('edit');
+      };
+      ownRow.appendChild(ownInfo);
+      ownRow.appendChild(ownBtn);
+      list.appendChild(ownRow);
+
+      for (const group of groupsList) {
+        const row = document.createElement('div');
+        row.className = 'room-choice-row';
+        const info = document.createElement('div');
+        info.style.minWidth = '0';
+        const name = document.createElement('div');
+        name.className = 'room-choice-name';
+        name.textContent = group.name;
+        const code = document.createElement('div');
+        code.className = 'room-choice-code';
+        code.textContent = group.id;
+        info.appendChild(name);
+        info.appendChild(code);
+        const btn = document.createElement('button');
+        btn.textContent = 'View';
+        btn.onclick = () => openGroupRoomFromMenu(group.id, 'edit');
+        row.appendChild(info);
+        row.appendChild(btn);
+        list.appendChild(row);
+      }
+    }
+
+    function openRoomViewChooser() {
+      renderRoomChoices();
+      openPanel('room-view-panel');
     }
 
     function queueGroupBubble(groupId, userId, text) {
@@ -3807,7 +3918,7 @@
       localStorage.setItem('showRoom', showingRoom);
       roomViewWrap.classList.toggle('show', showingRoom);
       canvas.style.display = showingRoom ? 'none' : 'block';
-      document.getElementById('viewroom-btn').textContent = showingRoom ? 'Hide Room' : 'View Room';
+      document.getElementById('viewroom-btn').textContent = 'View Room';
       if (showingRoom) loadRoomView();
       else rvSetPlaying(false);
       positionBubble();
@@ -4148,9 +4259,7 @@
             document.getElementById('menu').classList.remove('open');
             window.electronAPI?.openRoom();
           } else if (action === 'viewroom') {
-            menuOpen = false;
-            document.getElementById('menu').classList.remove('open');
-            toggleRoomView();
+            openRoomViewChooser();
           } else if (action === 'hide') {
             menuOpen = false;
             document.getElementById('menu').classList.remove('open');
@@ -4232,7 +4341,7 @@
       if (showingRoom) {
         roomViewWrap.classList.add('show');
         canvas.style.display = 'none';
-        document.getElementById('viewroom-btn').textContent = 'Hide Room';
+        document.getElementById('viewroom-btn').textContent = 'View Room';
         loadRoomView();
       }
 

@@ -241,9 +241,7 @@
     }
 
     /* ── Group mode ── */
-    body.group-mode .room-picker,
-    body.group-mode .palette { display: none !important; }
-    body.group-mode .mode-btn[data-mode="edit"] { display: none !important; }
+    body.group-mode .room-picker { display: none !important; }
     body.group-mode .main-area { justify-content: center; }
     body.group-mode .room-area { position: relative; }
     .group-title {
@@ -270,7 +268,7 @@
       max-width: 420px;
       z-index: 5;
     }
-    body.group-mode .group-chat { display: flex; }
+    .group-chat.open { display: flex; }
     .group-chat-log {
       max-height: 120px;
       overflow-y: auto;
@@ -316,6 +314,34 @@
     }
     .group-chat-input-row button:hover { background: #fff2cf; transform: translateY(-1px); }
     .group-chat-input-row button:active { transform: translate(1px, 1px); }
+    .room-control-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-start;
+    }
+    .group-chat-toggle {
+      display: none;
+      min-width: 138px;
+      height: 30px;
+      border: 0;
+      border-radius: 0;
+      cursor: pointer;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 12px;
+      font-weight: 900;
+      color: #4b3528;
+      background: #ffd96b;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #5c4634,
+        inset 0 0 0 3px #fff2a1,
+        2px 2px 0 #8f6d4d;
+    }
+    body.group-mode .group-chat-toggle { display: block; }
+    .group-chat-toggle.active { background: #dfd4fa; color: #41305e; }
+    .group-chat-toggle:hover { background: #fff2cf; transform: translateY(-1px); }
+    .group-chat-toggle:active { transform: translate(1px, 1px); }
   </style>
 </head>
 <body>
@@ -340,9 +366,12 @@
   </div>
 
   <div class="bottom-bar">
-    <div class="mode-toggle">
-      <button class="mode-btn active" data-mode="edit">Edit</button>
-      <button class="mode-btn" data-mode="play">Play</button>
+    <div class="room-control-stack">
+      <button class="group-chat-toggle" id="group-chat-toggle">Chat</button>
+      <div class="mode-toggle">
+        <button class="mode-btn active" data-mode="edit">Edit</button>
+        <button class="mode-btn" data-mode="play">Play</button>
+      </div>
     </div>
     <span class="hint" id="hint">Drag items from palette · Wall items stay on walls · Floor items stay on floor</span>
   </div>
@@ -1691,6 +1720,11 @@ function findRandomWalkableMochiPosition() {
 }
 
 function defaultHintText() {
+  if (groupRoomId) {
+    return mode === 'edit'
+      ? 'Shared group room · Drag items and everyone will see the change'
+      : 'Shared group room · Play is on · Use Chat to make your cat speak';
+  }
   return mode === 'edit'
     ? 'Drag items from palette · Wall items stay on walls · Floor items stay on floor'
     : 'Click furniture for Mochi to interact · Click bowls to refill';
@@ -2242,12 +2276,13 @@ function loadRoomLayout() {
   }
   roomLayouts[currentRoom] = items;
   migrateLegacyBowlStates(items);
-  if (changed) saveRoomLayout();
+  if (changed) saveRoomLayout({ publish: false });
 }
-function saveRoomLayout() {
+function saveRoomLayout(options = {}) {
   const items = roomLayouts[currentRoom] || [];
   localStorage.setItem('roomLayout_' + currentRoom, JSON.stringify(items));
   pruneBowlStates(items);
+  if (groupRoomId && options.publish !== false) scheduleGroupRoomLayoutPublish();
 }
 function getPlacedItems() { return roomLayouts[currentRoom] || []; }
 
@@ -2973,6 +3008,8 @@ const groupSeenChatIds = new Set();
 let groupSendInFlight = false;
 let ownUserId = null; // set from presence self-echo
 let lastGroupRoomPresenceAt = 0;
+let lastGroupLayoutUpdatedAt = 0;
+let groupLayoutPublishTimer = null;
 
 function sanitizeGroupIdClient(id) {
   return String(id || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 32);
@@ -2985,12 +3022,77 @@ function clearGroupChatDom() {
   if (input) input.value = '';
 }
 
+function normalizeGroupRoomItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => ({
+      id: String(item?.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80),
+      x: Math.round(Number(item?.x)),
+      y: Math.round(Number(item?.y)),
+      instanceId: String(item?.instanceId || '').slice(0, 80)
+    }))
+    .filter((item) => item.id && getCatalogItem(item.id) && Number.isFinite(item.x) && Number.isFinite(item.y))
+    .map((item) => ({
+      ...item,
+      x: Math.max(-256, Math.min(768, item.x)),
+      y: Math.max(-256, Math.min(768, item.y)),
+      instanceId: item.instanceId || makeItemInstanceId()
+    }));
+}
+
+function currentGroupLayoutPayload() {
+  return {
+    roomNum: GROUP_ROOM_NUM,
+    items: normalizeGroupRoomItems(getPlacedItems()),
+    updatedAt: Date.now()
+  };
+}
+
+function applyGroupRoomLayout(layout = {}, options = {}) {
+  if (!groupRoomId || !layout) return;
+  const updatedAt = Number(layout.updatedAt) || Date.now();
+  if (!options.force && updatedAt < lastGroupLayoutUpdatedAt) return;
+  lastGroupLayoutUpdatedAt = updatedAt;
+  const key = 'group_' + groupRoomId;
+  currentRoom = key;
+  const items = normalizeGroupRoomItems(layout.items);
+  roomLayouts[key] = items;
+  localStorage.setItem('roomLayout_' + key, JSON.stringify(items));
+  migrateLegacyBowlStates(items);
+  pruneBowlStates(items);
+  if (options.notice) setHint('Group room updated.');
+}
+
+function publishGroupRoomLayoutNow() {
+  if (!groupRoomId) return;
+  const layout = currentGroupLayoutPayload();
+  lastGroupLayoutUpdatedAt = layout.updatedAt;
+  window.electronAPI?.publishGroupRoomLayout?.({ groupId: groupRoomId, layout })
+    .then((result) => {
+      if (!result?.ok) setHint(result?.error || 'Could not sync group room.', true);
+    })
+    .catch((error) => setHint(String(error?.message || error), true));
+}
+
+function scheduleGroupRoomLayoutPublish() {
+  if (!groupRoomId) return;
+  clearTimeout(groupLayoutPublishTimer);
+  groupLayoutPublishTimer = setTimeout(() => {
+    groupLayoutPublishTimer = null;
+    publishGroupRoomLayoutNow();
+  }, 250);
+}
+
 function resetGroupRoomState() {
   groupMembers.clear();
   groupBubbles.clear();
   groupChatLog.length = 0;
   groupSeenChatIds.clear();
   ownUserId = null;
+  const chat = document.getElementById('group-chat');
+  const toggle = document.getElementById('group-chat-toggle');
+  chat?.classList.remove('open');
+  toggle?.classList.remove('active');
   clearGroupChatDom();
 }
 
@@ -3008,21 +3110,22 @@ function loadGroupRoomCanvasState() {
   }
 }
 
-function enterGroupMode(groupId, groupName) {
+function enterGroupMode(groupId, groupName, initialMode = 'edit') {
   const nextGroupId = sanitizeGroupIdClient(groupId);
   const switchedGroups = groupRoomId && groupRoomId !== nextGroupId;
   groupRoomId = nextGroupId;
   groupRoomName = String(groupName || '').trim().slice(0, 40) || 'Group';
   if (!groupRoomId) return;
   if (switchedGroups || groupMembers.size || groupChatLog.length) resetGroupRoomState();
+  if (switchedGroups) lastGroupLayoutUpdatedAt = 0;
   document.body.classList.add('group-mode');
   const titleEl = document.getElementById('group-title');
   if (titleEl) titleEl.textContent = groupRoomName + ' · ' + groupRoomId;
   loadGroupRoomCanvasState();
-  setRoomMode('play');
+  setRoomMode(initialMode === 'play' ? 'play' : 'edit');
   setupGroupChatUI();
   loadGroupSnapshot();
-  setHint('Group room is live · Play is on · Say something and your cat will speak');
+  setHint(defaultHintText());
 }
 
 function exitGroupMode(nextMode = 'edit') {
@@ -3033,6 +3136,9 @@ function exitGroupMode(nextMode = 'edit') {
   document.body.classList.remove('group-mode');
   groupRoomId = null;
   groupRoomName = null;
+  clearTimeout(groupLayoutPublishTimer);
+  groupLayoutPublishTimer = null;
+  lastGroupLayoutUpdatedAt = 0;
   resetGroupRoomState();
   const savedRoom = parseInt(localStorage.getItem('currentRoom') || '1');
   loadRoom(Number.isFinite(savedRoom) ? savedRoom : 1);
@@ -3091,6 +3197,7 @@ function upsertGroupMember(raw) {
 function applyGroupSnapshot(snapshot) {
   if (!snapshot?.ok || sanitizeGroupIdClient(snapshot.groupId) !== groupRoomId) return;
   resetGroupRoomState();
+  if (snapshot.layout) applyGroupRoomLayout(snapshot.layout, { force: true });
   for (const member of snapshot.members || []) upsertGroupMember(member);
   const messages = Array.isArray(snapshot.messages) ? snapshot.messages : [];
   for (const message of messages) {
@@ -3113,9 +3220,19 @@ function loadGroupSnapshot() {
 }
 
 function setupGroupChatUI() {
+  const chat = document.getElementById('group-chat');
+  const toggle = document.getElementById('group-chat-toggle');
   const input = document.getElementById('group-chat-input');
   const send = document.getElementById('group-chat-send');
   if (!input || !send) return;
+  if (toggle && chat) {
+    toggle.onclick = () => {
+      const open = !chat.classList.contains('open');
+      chat.classList.toggle('open', open);
+      toggle.classList.toggle('active', open);
+      if (open) input.focus();
+    };
+  }
   const doSend = () => {
     if (groupSendInFlight || !groupRoomId) return;
     const text = String(input.value || '').trim().slice(0, GROUP_CHAT_MAX);
@@ -3211,6 +3328,8 @@ function handleRoomGroupEvent(event) {
       isOwn: !!event.isOwn,
       sentAt: payload.sentAt
     });
+  } else if (event.kind === 'group-room-layout') {
+    applyGroupRoomLayout(payload.layout || payload, { notice: !event.isOwn });
   }
 }
 
@@ -3533,7 +3652,7 @@ function drawGroupBubble(text, cx, cy) {
 function applyRoomModePayload(payload) {
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
     if (payload.groupId) {
-      enterGroupMode(payload.groupId, payload.groupName);
+      enterGroupMode(payload.groupId, payload.groupName, payload.mode || 'edit');
       return;
     }
     exitGroupMode(payload.mode || 'edit');
@@ -3549,7 +3668,7 @@ const urlParams = new URLSearchParams(window.location.search);
 const urlGroupId = sanitizeGroupIdClient(urlParams.get('groupId') || '');
 const urlGroupName = urlParams.get('groupName') || '';
 if (urlGroupId) {
-  enterGroupMode(urlGroupId, urlGroupName);
+  enterGroupMode(urlGroupId, urlGroupName, urlParams.get('mode') || 'edit');
   mochiPlay('idle');
 } else {
   loadRoom(currentRoom);

@@ -70,6 +70,7 @@ const GROUP_NAME_MAX = 40;
 const GROUP_ID_MAX = 32;
 const GROUP_CACHE_MAX_CHAT = 80;
 const GROUP_CACHE_MAX_MEMBERS = 80;
+const GROUP_CACHE_MAX_ITEMS = 160;
 let groupConfig = {
   groups: [],
   userId: null,
@@ -82,6 +83,7 @@ const groupStreams = new Map(); // groupId -> { controller, restartTimer }
 const groupSeenMessageIds = new Set();
 const groupPresenceCache = new Map(); // groupId -> Map<userId, member>
 const groupChatCache = new Map(); // groupId -> Array<message>
+const groupRoomLayoutCache = new Map(); // groupId -> { roomNum, items, updatedAt, updatedBy }
 const groupRoomPositions = new Map(); // groupId -> { x, y, updatedAt }
 let groupHeartbeatTimer = null;
 let groupCacheLoaded = false;
@@ -916,6 +918,34 @@ function sanitizeGroupId(id) {
     .slice(0, GROUP_ID_MAX);
 }
 
+function sanitizeRoomItemId(value) {
+  return sanitizeText(value, 80).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+}
+
+function sanitizeGroupRoomItem(item = {}) {
+  const id = sanitizeRoomItemId(item.id);
+  const x = Number(item.x);
+  const y = Number(item.y);
+  if (!id || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return {
+    id,
+    x: Math.round(Math.max(-256, Math.min(768, x))),
+    y: Math.round(Math.max(-256, Math.min(768, y))),
+    instanceId: sanitizeText(item.instanceId, 80) || `shared-${crypto.randomBytes(4).toString('hex')}`
+  };
+}
+
+function sanitizeGroupRoomLayout(layout = {}) {
+  const rawItems = Array.isArray(layout.items) ? layout.items : [];
+  const roomNum = Number(layout.roomNum);
+  return {
+    roomNum: Number.isFinite(roomNum) ? Math.max(1, Math.min(15, Math.round(roomNum))) : 1,
+    items: rawItems.slice(0, GROUP_CACHE_MAX_ITEMS).map(sanitizeGroupRoomItem).filter(Boolean),
+    updatedAt: Number(layout.updatedAt) || Date.now(),
+    updatedBy: sanitizeMessageId(layout.updatedBy)
+  };
+}
+
 function groupTopicForId(id) {
   const safe = sanitizeGroupId(id).toLowerCase();
   return `${GROUP_TOPIC_PREFIX}${safe}`.slice(0, 64);
@@ -949,6 +979,10 @@ function getGroupChat(groupId) {
   const id = sanitizeGroupId(groupId);
   if (!groupChatCache.has(id)) groupChatCache.set(id, []);
   return groupChatCache.get(id);
+}
+
+function getGroupRoomLayout(groupId) {
+  return groupRoomLayoutCache.get(sanitizeGroupId(groupId)) || null;
 }
 
 function loadGroupCacheOnce() {
@@ -1003,6 +1037,13 @@ function loadGroupCacheOnce() {
         rememberGroupMessageId(groupId, id);
       }
     }
+
+    const layouts = parsed?.layouts && typeof parsed.layouts === 'object' ? parsed.layouts : {};
+    for (const [rawGroupId, rawLayout] of Object.entries(layouts)) {
+      const groupId = sanitizeGroupId(rawGroupId);
+      if (!groupId || !rawLayout || typeof rawLayout !== 'object') continue;
+      groupRoomLayoutCache.set(groupId, sanitizeGroupRoomLayout(rawLayout));
+    }
   } catch {
     // A corrupt cache should never stop group rooms from working live.
   }
@@ -1023,9 +1064,16 @@ function saveGroupCacheNow() {
   for (const [groupId, messages] of groupChatCache.entries()) {
     chat[groupId] = messages.slice(-GROUP_CACHE_MAX_CHAT);
   }
+  const layouts = {};
+  for (const [groupId, layout] of groupRoomLayoutCache.entries()) {
+    layouts[groupId] = {
+      ...layout,
+      items: Array.isArray(layout.items) ? layout.items.slice(0, GROUP_CACHE_MAX_ITEMS) : []
+    };
+  }
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ version: 1, members, chat }, null, 2));
+    fs.writeFileSync(file, JSON.stringify({ version: 2, members, chat, layouts }, null, 2));
   } catch {
     // Best-effort cache only.
   }
@@ -1091,6 +1139,20 @@ function storeGroupChatEvent(event) {
   scheduleGroupCacheSave();
 }
 
+function storeGroupRoomLayoutEvent(event) {
+  const groupId = sanitizeGroupId(event?.groupId);
+  const payload = event?.payload || {};
+  if (!groupId) return;
+  const layout = sanitizeGroupRoomLayout(payload.layout || payload);
+  const previous = groupRoomLayoutCache.get(groupId);
+  if (previous && Number(previous.updatedAt) > Number(layout.updatedAt)) return;
+  groupRoomLayoutCache.set(groupId, {
+    ...layout,
+    updatedBy: sanitizeMessageId(layout.updatedBy || payload.from?.id)
+  });
+  scheduleGroupCacheSave();
+}
+
 function buildOwnGroupPresenceEvent(groupId) {
   if (!groupConfig.userId) return null;
   const roomPosition = groupRoomPositions.get(sanitizeGroupId(groupId));
@@ -1125,11 +1187,13 @@ function getGroupSnapshot(groupId) {
     ...message,
     isOwn: !!groupConfig.userId && message.userId === groupConfig.userId
   }));
+  const layout = getGroupRoomLayout(id);
   return {
     ok: true,
     groupId: id,
     members,
     messages,
+    layout,
     now: Date.now()
   };
 }
@@ -1207,6 +1271,21 @@ function dispatchGroupPayload(groupId, payload) {
       sentAt: sanitizeText(payload.sentAt, 40) || new Date().toISOString()
     }, isOwn);
     storeGroupChatEvent(event);
+    broadcastGroupEvent(event);
+    return;
+  }
+
+  if (kind === 'group-room-layout') {
+    const event = buildGroupEvent('group-room-layout', groupId, {
+      id: sanitizeMessageId(payload.id) || makePetMessageId(),
+      from: safeFrom,
+      layout: sanitizeGroupRoomLayout({
+        ...(payload.layout || payload),
+        updatedBy: fromId
+      }),
+      sentAt: sanitizeText(payload.sentAt, 40) || new Date().toISOString()
+    }, isOwn);
+    storeGroupRoomLayoutEvent(event);
     broadcastGroupEvent(event);
   }
 }
@@ -1519,6 +1598,46 @@ ipcMain.handle('send-group-message', async (_, payload) => {
   return { ok: true, id: body.id, sentAt: body.sentAt, event };
 });
 
+ipcMain.handle('publish-group-room-layout', async (_, payload = {}) => {
+  loadGroupCacheOnce();
+  const groupId = sanitizeGroupId(payload.groupId);
+  if (!groupId || !groupConfig.groups.some(g => g.id === groupId)) {
+    return { ok: false, error: 'Group not found.' };
+  }
+  if (!groupConfig.userId) return { ok: false, error: 'Profile not ready.' };
+  if (petMessageRelayKind() !== 'ntfy') {
+    return { ok: false, error: 'Groups need an ntfy relay.' };
+  }
+
+  const layout = sanitizeGroupRoomLayout({
+    ...(payload.layout || {}),
+    updatedBy: groupConfig.userId
+  });
+  const body = {
+    kind: 'group-room-layout',
+    groupId,
+    id: makePetMessageId(),
+    from: {
+      id: groupConfig.userId,
+      catName: groupConfig.catName,
+      appearance: sanitizeAppearance(groupConfig.appearance)
+    },
+    layout,
+    sentAt: new Date().toISOString()
+  };
+  const ok = await publishGroupPayload(groupId, body);
+  if (!ok) return { ok: false, error: 'Could not reach the relay — try again.' };
+  const event = buildGroupEvent('group-room-layout', groupId, {
+    id: body.id,
+    from: body.from,
+    layout,
+    sentAt: body.sentAt
+  }, true);
+  storeGroupRoomLayoutEvent(event);
+  broadcastGroupEvent(event);
+  return { ok: true, event };
+});
+
 ipcMain.handle('get-group-snapshot', (_, groupId) => getGroupSnapshot(groupId));
 
 ipcMain.on('update-group-room-presence', (_, payload = {}) => {
@@ -1558,7 +1677,7 @@ ipcMain.on('open-group-room', (_, payload = {}) => {
   const groupName = payload.groupName
     ? sanitizeText(payload.groupName, GROUP_NAME_MAX) || 'Group'
     : 'Group';
-  createRoomWindow('play', { groupId, groupName });
+  createRoomWindow(payload.mode === 'play' ? 'play' : 'edit', { groupId, groupName });
 });
 ipcMain.on('close-room', () => {
   if (roomWindow && !roomWindow.isDestroyed()) roomWindow.close();
