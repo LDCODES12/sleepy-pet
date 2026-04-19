@@ -1,11 +1,12 @@
 {
   "name": "sleepy-pet",
-  "version": "1.2.7",
+  "version": "1.2.8",
   "description": "A kawaii desktop pet that helps you get to bed on time",
   "author": "Liam",
   "main": "main.js",
   "scripts": {
     "start": "cross-env ELECTRON_RUN_AS_NODE= electron .",
+    "relay": "node relay/free-relay.js",
     "dist": "node node_modules/electron-builder/cli.js --mac",
     "dist:win": "node node_modules/electron-builder/cli.js --win",
     "dist:all": "node node_modules/electron-builder/cli.js --mac --win"
@@ -31,6 +32,7 @@
       "room-preload.js",
       "index.html",
       "room.html",
+      "relay/**/*",
       "assets/**/*"
     ],
     "publish": {

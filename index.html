@@ -91,6 +91,100 @@
       z-index: 1;
     }
 
+    /* -- Visiting message cat -- */
+    #visitor-wrap {
+      position: absolute;
+      top: 236px;
+      left: 0;
+      width: 220px;
+      height: 200px;
+      display: none;
+      pointer-events: none;
+      z-index: 7;
+      opacity: 0;
+      transition: opacity 160ms ease;
+    }
+    #visitor-wrap.show {
+      display: block;
+      opacity: 1;
+    }
+    #visitor-canvas {
+      position: absolute;
+      left: 62px;
+      bottom: 4px;
+      width: 96px;
+      height: 80px;
+      image-rendering: pixelated;
+      background: transparent;
+    }
+    .visitor-name {
+      position: absolute;
+      left: 38px;
+      right: 38px;
+      bottom: 84px;
+      min-height: 16px;
+      padding: 2px 6px 3px;
+      background: #fff7df;
+      color: #4b3528;
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 9px;
+      font-weight: 900;
+      line-height: 1.1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 -2px 0 #d6c08b,
+        1px 1px 0 rgba(45, 37, 36, 0.72);
+    }
+    .visitor-bubble {
+      position: absolute;
+      left: 4px;
+      right: 4px;
+      bottom: 110px;
+      max-height: 72px;
+      overflow: hidden;
+      background: #f7e5bd;
+      color: #4b3528;
+      padding: 5px 9px 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1.25;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #5c4634,
+        inset 0 0 0 3px #8f6d4d,
+        inset 0 0 0 5px #fff2cf,
+        2px 2px 0 rgba(45, 37, 36, 0.7);
+      text-shadow: 0 1px 0 rgba(255, 246, 224, 0.9);
+    }
+    .visitor-bubble::after {
+      content: '';
+      position: absolute;
+      bottom: -7px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 7px solid #5c4634;
+    }
+    .visitor-bubble::before {
+      content: '';
+      position: absolute;
+      bottom: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid #f7e5bd;
+      z-index: 1;
+    }
+
     /* ── Menu ── */
     .menu {
       position: absolute; bottom: 72px; right: 4px;
@@ -369,6 +463,101 @@
       background: #f2e2bc;
       border: 1px solid #c2ae86;
     }
+
+    /* -- Messages -- */
+    #messages-panel { width: 236px; }
+    .msg-input {
+      width: 100%;
+      min-width: 0;
+      border: 0;
+      border-radius: 0;
+      background: #fff7df;
+      color: #4b3528;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0;
+      padding: 5px 7px;
+      outline: none;
+      box-shadow:
+        0 0 0 1px #8f6d4d,
+        inset 0 -2px 0 #d6c08b;
+    }
+    .msg-input:focus {
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #ffd96b,
+        inset 0 -2px 0 #d6c08b;
+    }
+    .msg-code-row {
+      display: grid;
+      grid-template-columns: 1fr 52px;
+      gap: 6px;
+      align-items: center;
+    }
+    .msg-code {
+      text-transform: uppercase;
+    }
+    .msg-text {
+      height: 54px;
+      resize: none;
+      text-transform: none;
+      line-height: 1.25;
+    }
+    .msg-actions {
+      display: grid;
+      grid-template-columns: 1fr 68px;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .msg-send-btn,
+    .msg-small-btn {
+      height: 24px;
+      border: 0;
+      border-radius: 0;
+      cursor: pointer;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 10px;
+      font-weight: 900;
+      color: #4b3528;
+      background: #d6c08b;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 0 0 3px #fff2cf,
+        1px 1px 0 #2d2524;
+    }
+    .msg-send-btn {
+      background: #ffd96b;
+      box-shadow:
+        0 0 0 1px #2d2524,
+        inset 0 0 0 3px #fff2a1,
+        1px 1px 0 #8f6d4d;
+    }
+    .msg-send-btn:hover,
+    .msg-small-btn:hover {
+      background: #fff2cf;
+      transform: translateY(-1px);
+    }
+    .msg-send-btn:active,
+    .msg-small-btn:active {
+      transform: translate(1px, 1px);
+    }
+    .msg-status {
+      min-height: 24px;
+      margin-top: 8px;
+      padding: 5px 6px;
+      background: #f2e2bc;
+      color: #6f5643;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 8px;
+      font-weight: 900;
+      line-height: 1.25;
+      box-shadow: 0 0 0 1px #c2ae86;
+    }
+    .msg-status.warn {
+      color: #8a4a2d;
+      background: #ffe1b8;
+    }
   </style>
 </head>
 <body>
@@ -378,6 +567,11 @@
     <canvas id="room-view" width="256" height="256"></canvas>
   </div>
   <div class="bubble" id="bubble"></div>
+  <div id="visitor-wrap" aria-hidden="true">
+    <div class="visitor-bubble" id="visitor-bubble"></div>
+    <div class="visitor-name" id="visitor-name"></div>
+    <canvas id="visitor-canvas" width="96" height="80"></canvas>
+  </div>
 
   <!-- Menu -->
   <div class="menu" id="menu">
@@ -385,6 +579,7 @@
     <button class="menu-btn" data-action="settings">Sleep</button>
     <button class="menu-btn" data-action="room">Edit Room</button>
     <button class="menu-btn" data-action="viewroom" id="viewroom-btn">View Room</button>
+    <button class="menu-btn" data-action="messages">Messages</button>
     <button class="menu-btn" data-action="inv">Inventory</button>
     <button class="menu-btn" data-action="follow" id="follow-btn">Follow Mouse</button>
     <button class="menu-btn" data-action="hide">Hide Mochi</button>
@@ -428,11 +623,34 @@
     <div class="inv-grid" id="skin-grid"></div>
   </div>
 
+  <!-- Messages -->
+  <div class="panel" id="messages-panel">
+    <div class="panel-header"><h3>Messages</h3><button class="panel-close" data-panel="messages-panel">&times;</button></div>
+    <span class="lbl">Cat name</span>
+    <input class="msg-input" id="message-cat-name" maxlength="24" spellcheck="false">
+    <span class="lbl">Your code</span>
+    <div class="msg-code-row">
+      <input class="msg-input msg-code" id="message-user-id" readonly spellcheck="false">
+      <button class="msg-small-btn" id="message-copy-code">Copy</button>
+    </div>
+    <span class="lbl">Friend code</span>
+    <input class="msg-input msg-code" id="message-to" maxlength="64" spellcheck="false">
+    <span class="lbl">Message</span>
+    <textarea class="msg-input msg-text" id="message-text" maxlength="180" spellcheck="true"></textarea>
+    <div class="msg-actions">
+      <button class="msg-send-btn" id="message-send">Send</button>
+      <button class="msg-small-btn" id="message-preview">Preview</button>
+    </div>
+    <div class="msg-status" id="message-status">Public relay ready.</div>
+    <span class="lbl">Relay URL</span>
+    <input class="msg-input" id="message-relay-url" maxlength="120" spellcheck="false">
+  </div>
+
   <script>
     // ═══════ MOUSE CLICK-THROUGH ═══════
     // Window ignores mouse by default. When mouse enters visible content,
     // we tell main process to stop ignoring so we can interact.
-    const interactiveEls = ['cat-canvas', 'room-view-wrap', 'menu', 'settings-panel', 'inv-panel'];
+    const interactiveEls = ['cat-canvas', 'room-view-wrap', 'menu', 'settings-panel', 'inv-panel', 'messages-panel'];
 
     function setupClickThrough() {
       for (const id of interactiveEls) {
@@ -451,6 +669,12 @@
     const canvas = document.getElementById('cat-canvas');
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
+    const visitorWrap = document.getElementById('visitor-wrap');
+    const visitorCanvas = document.getElementById('visitor-canvas');
+    const visitorCtx = visitorCanvas.getContext('2d');
+    visitorCtx.imageSmoothingEnabled = false;
+    const visitorNameEl = document.getElementById('visitor-name');
+    const visitorBubbleEl = document.getElementById('visitor-bubble');
     const CAT_RENDER_SCALE = 2;
     const CAT_STAGE_W = 96;
     const CAT_STAGE_H = 80;
@@ -596,6 +820,7 @@
           localStorage.removeItem('selectedRibbon');
           syncInventorySelectionUI();
           updateInvPreview();
+          configurePetMessages();
           return;
         }
         selectedRibbon = file;
@@ -617,6 +842,7 @@
           localStorage.removeItem('selectedSkin');
           syncInventorySelectionUI();
           updateInvPreview();
+          configurePetMessages();
           return;
         }
         selectedSkin = file;
@@ -627,6 +853,131 @@
         img.onload = () => { skinAtlasImg = img; updateInvPreview(); };
         img.src = 'assets/cat-pack-paid/CatPackPaid/CatPackDifferentSkins/' + file;
       }
+      configurePetMessages();
+    }
+
+    // Visiting cats deliver messages from friends.
+    const visitorQueue = [];
+    let visitorState = null;
+    let visitorAtlasImg = null;
+    let visitorAtlasKey = '';
+
+    function easeVisitor(t) {
+      return 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
+    }
+
+    function normalizeReceivedPetMessage(message = {}) {
+      const from = message.from || {};
+      const catName = String(from.catName || message.catName || 'Mochi').trim().slice(0, 24) || 'Mochi';
+      const text = String(message.text || message.message || '').trim().slice(0, 180);
+      return {
+        id: String(message.id || Date.now()),
+        text,
+        demo: !!message.demo,
+        from: {
+          id: String(from.id || '').trim(),
+          catName,
+          appearance: {
+            selectedRibbon: from.appearance?.selectedRibbon || null,
+            selectedSkin: from.appearance?.selectedSkin || null,
+          },
+        },
+      };
+    }
+
+    function loadVisitorAppearance(appearance = {}) {
+      const ribbon = appearance.selectedRibbon || null;
+      const skin = appearance.selectedSkin || null;
+      const key = ribbon ? 'ribbon:' + ribbon : skin ? 'skin:' + skin : 'classic';
+      if (visitorAtlasKey === key) return;
+      visitorAtlasKey = key;
+      visitorAtlasImg = null;
+      if (ribbon) {
+        const img = new Image();
+        img.onload = () => { if (visitorAtlasKey === key) visitorAtlasImg = img; };
+        img.src = 'assets/cat-pack-paid/CatPackPaid/Sprites/CatwithRibbon/CatPackRibbon' + ribbon + '.png';
+      } else if (skin) {
+        const img = new Image();
+        img.onload = () => { if (visitorAtlasKey === key) visitorAtlasImg = img; };
+        img.src = 'assets/cat-pack-paid/CatPackPaid/CatPackDifferentSkins/' + skin;
+      }
+    }
+
+    function queueVisitorMessage(message) {
+      const next = normalizeReceivedPetMessage(message);
+      if (!next.text) return;
+      visitorQueue.push(next);
+      if (!visitorState) startNextVisitorMessage(performance.now());
+    }
+
+    function startNextVisitorMessage(t = performance.now()) {
+      const message = visitorQueue.shift();
+      if (!message) return;
+      const side = Math.random() < 0.5 ? 'left' : 'right';
+      visitorState = {
+        message,
+        side,
+        startedAt: t,
+        lastFrameAt: t,
+        frame: 0,
+        duration: 8200,
+      };
+      loadVisitorAppearance(message.from.appearance);
+      visitorNameEl.textContent = message.from.catName;
+      visitorBubbleEl.textContent = message.demo ? message.text + ' (preview)' : message.text;
+      visitorWrap.classList.add('show');
+    }
+
+    function drawVisitorCat(t) {
+      if (!visitorState) return;
+      const anim = ANIMS.excited;
+      if (t - visitorState.lastFrameAt >= anim.speed) {
+        visitorState.lastFrameAt = t;
+        visitorState.frame = (visitorState.frame + 1) % anim.frames;
+      }
+
+      visitorCtx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
+      const f = Math.min(visitorState.frame, anim.frames - 1);
+      const row = ATLAS_ANIM_ROWS.excited;
+      const flip = visitorState.side === 'right';
+      if (visitorAtlasImg && row !== undefined) {
+        const anchor = getAnimationAnchor(visitorAtlasImg, 'excited', row, 'visitor:' + visitorAtlasKey);
+        drawAnchoredFrame(visitorCtx, visitorAtlasImg, f * S, row * S, anchor, CAT_RENDER_SCALE, CAT_STAGE_ANCHOR.x, CAT_STAGE_ANCHOR.y, flip);
+      } else if (imgs.excited) {
+        const anchor = getAnimationAnchor(imgs.excited, 'excited', 0, 'visitor:classic');
+        drawAnchoredFrame(visitorCtx, imgs.excited, f * S, 0, anchor, CAT_RENDER_SCALE, CAT_STAGE_ANCHOR.x, CAT_STAGE_ANCHOR.y, flip);
+      }
+    }
+
+    function updateVisitor(t) {
+      if (!visitorState) {
+        if (visitorQueue.length) startNextVisitorMessage(t);
+        return;
+      }
+
+      const elapsed = t - visitorState.startedAt;
+      if (elapsed >= visitorState.duration) {
+        visitorWrap.classList.remove('show');
+        visitorCtx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
+        visitorState = null;
+        if (visitorQueue.length) setTimeout(() => startNextVisitorMessage(performance.now()), 350);
+        return;
+      }
+
+      const side = visitorState.side;
+      const startX = side === 'left' ? -220 : 340;
+      const holdX = side === 'left' ? 16 : 108;
+      const exitX = side === 'left' ? -220 : 340;
+      let x = holdX;
+      if (elapsed < 900) {
+        x = startX + (holdX - startX) * easeVisitor(elapsed / 900);
+      } else if (elapsed > visitorState.duration - 900) {
+        const p = easeVisitor((elapsed - (visitorState.duration - 900)) / 900);
+        x = holdX + (exitX - holdX) * p;
+      }
+      const bob = Math.round(Math.sin(elapsed / 120) * 2);
+      visitorWrap.style.transform = `translate(${Math.round(x)}px, ${bob}px)`;
+      drawVisitorCat(t);
     }
 
     function tick(t) {
@@ -670,6 +1021,8 @@
         const anchor = getAnimationAnchor(img, curAnim, 0, 'individual:' + curAnim);
         drawAnchoredFrame(ctx, img, f * S, 0, anchor, CAT_RENDER_SCALE, CAT_STAGE_ANCHOR.x, CAT_STAGE_ANCHOR.y, catFlip);
       }
+
+      updateVisitor(t);
 
       // Update mini room view if active
       if (showingRoom) renderRoomView(t);
@@ -1158,6 +1511,186 @@
       if (curAnim !== 'excited') {
         play('excited');
       }
+    }
+
+    // ═══════ PET MESSAGES ═══════
+    const DEFAULT_MESSAGE_RELAY_URL = 'https://ntfy.sh';
+    const MESSAGE_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let messageRelayStatus = { relayEnabled: true, relayKind: 'ntfy', status: 'idle' };
+
+    function randomMessageCodePart(len) {
+      let value = '';
+      const cryptoApi = window.crypto || window.msCrypto;
+      const bytes = new Uint8Array(len);
+      if (cryptoApi?.getRandomValues) cryptoApi.getRandomValues(bytes);
+      for (let i = 0; i < len; i++) {
+        const n = bytes[i] || Math.floor(Math.random() * 255);
+        value += MESSAGE_CODE_CHARS[n % MESSAGE_CODE_CHARS.length];
+      }
+      return value;
+    }
+
+    function normalizeMessageCode(value) {
+      return String(value || '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9_-]/g, '')
+        .slice(0, 64);
+    }
+
+    function getOrCreateMessageUserId() {
+      const existing = normalizeMessageCode(localStorage.getItem('messageUserId'));
+      if (existing) return existing;
+      const next = randomMessageCodePart(4) + '-' + randomMessageCodePart(4) + '-' + randomMessageCodePart(4);
+      localStorage.setItem('messageUserId', next);
+      return next;
+    }
+
+    function currentMessageAppearance() {
+      return {
+        selectedRibbon: selectedRibbon || null,
+        selectedSkin: selectedSkin || null,
+      };
+    }
+
+    function messageProfile() {
+      return {
+        userId: getOrCreateMessageUserId(),
+        catName: (localStorage.getItem('messageCatName') || 'Mochi').trim().slice(0, 24) || 'Mochi',
+        relayUrl: (localStorage.getItem('messageRelayUrl') || DEFAULT_MESSAGE_RELAY_URL).trim() || DEFAULT_MESSAGE_RELAY_URL,
+        appearance: currentMessageAppearance(),
+      };
+    }
+
+    function messageStatus(text, warn = false) {
+      const el = document.getElementById('message-status');
+      if (!el) return;
+      el.textContent = text;
+      el.classList.toggle('warn', warn);
+    }
+
+    function describeMessageStatus(status = messageRelayStatus) {
+      if (!status.relayEnabled) return 'Preview only. Add a relay URL to send.';
+      if (status.status === 'error') return 'Relay trouble: ' + (status.error || 'try again soon.');
+      if (status.relayKind === 'ntfy') return 'Public relay ready. Share your code.';
+      return 'Relay ready. Share your code.';
+    }
+
+    function syncMessageInputs() {
+      const profile = messageProfile();
+      const catName = document.getElementById('message-cat-name');
+      const userId = document.getElementById('message-user-id');
+      const relayUrl = document.getElementById('message-relay-url');
+      const to = document.getElementById('message-to');
+      if (catName && catName.value !== profile.catName) catName.value = profile.catName;
+      if (userId) userId.value = profile.userId;
+      if (relayUrl && !relayUrl.value) relayUrl.value = profile.relayUrl;
+      if (to && !to.value) to.value = normalizeMessageCode(localStorage.getItem('messageLastTo'));
+      messageStatus(describeMessageStatus());
+    }
+
+    function configurePetMessages() {
+      const profile = messageProfile();
+      window.electronAPI?.configurePetMessages?.(profile).then((result) => {
+        if (!result?.ok) return;
+        messageRelayStatus = {
+          ...messageRelayStatus,
+          relayEnabled: result.relayEnabled,
+          relayKind: result.relayKind,
+          relayUrl: result.relayUrl,
+          userId: result.userId,
+        };
+        messageStatus(describeMessageStatus());
+      }).catch((error) => {
+        messageStatus('Relay setup failed: ' + String(error?.message || error), true);
+      });
+    }
+
+    function setupMessages() {
+      syncMessageInputs();
+      configurePetMessages();
+
+      const catName = document.getElementById('message-cat-name');
+      const relayUrl = document.getElementById('message-relay-url');
+      const to = document.getElementById('message-to');
+      const text = document.getElementById('message-text');
+      const copy = document.getElementById('message-copy-code');
+      const send = document.getElementById('message-send');
+      const preview = document.getElementById('message-preview');
+
+      catName.oninput = () => {
+        const clean = catName.value.trim().slice(0, 24) || 'Mochi';
+        localStorage.setItem('messageCatName', clean);
+        configurePetMessages();
+      };
+      relayUrl.onchange = () => {
+        const clean = relayUrl.value.trim() || DEFAULT_MESSAGE_RELAY_URL;
+        relayUrl.value = clean;
+        localStorage.setItem('messageRelayUrl', clean);
+        configurePetMessages();
+      };
+      to.oninput = () => {
+        const clean = normalizeMessageCode(to.value);
+        if (to.value !== clean) to.value = clean;
+        localStorage.setItem('messageLastTo', clean);
+      };
+      copy.onclick = async () => {
+        try {
+          await navigator.clipboard?.writeText(getOrCreateMessageUserId());
+          messageStatus('Code copied.');
+        } catch {
+          messageStatus('Your code is ready to share.');
+        }
+      };
+      send.onclick = () => sendPetMessageFromPanel(false);
+      preview.onclick = () => sendPetMessageFromPanel(true);
+      text.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') sendPetMessageFromPanel(false);
+      });
+
+      window.electronAPI?.onPetMessage?.((message) => {
+        queueVisitorMessage(message);
+      });
+      window.electronAPI?.onPetMessageStatus?.((status) => {
+        messageRelayStatus = { ...messageRelayStatus, ...status };
+        messageStatus(describeMessageStatus(status), status.status === 'error');
+      });
+    }
+
+    function sendPetMessageFromPanel(previewOnly) {
+      const profile = messageProfile();
+      const toEl = document.getElementById('message-to');
+      const textEl = document.getElementById('message-text');
+      const to = previewOnly ? profile.userId : normalizeMessageCode(toEl.value);
+      const text = textEl.value.trim().slice(0, 180);
+      if (!text) {
+        messageStatus('Write a message first.', true);
+        return;
+      }
+      if (!to) {
+        messageStatus('Paste a friend code first.', true);
+        return;
+      }
+      localStorage.setItem('messageLastTo', to);
+      messageStatus(previewOnly ? 'Previewing...' : 'Sending...');
+      window.electronAPI?.sendPetMessage?.({
+        id: 'msg-' + Date.now().toString(36) + '-' + randomMessageCodePart(4).toLowerCase(),
+        to,
+        text,
+        from: {
+          id: profile.userId,
+          catName: profile.catName,
+          appearance: profile.appearance,
+        },
+      }).then((result) => {
+        if (!result?.ok) {
+          messageStatus(result?.error || 'Could not send.', true);
+          return;
+        }
+        messageStatus(result.message || 'Sent.');
+        if (!previewOnly) textEl.value = '';
+      }).catch((error) => {
+        messageStatus('Could not send: ' + String(error?.message || error), true);
+      });
     }
 
     // ═══════ MINI ROOM VIEW ═══════
@@ -2941,6 +3474,7 @@
       });
 
       setupInventory();
+      setupMessages();
       updateSleepInfo();
       updateInvPreview();
       canvas.classList.toggle('follow-mode', followingMouse);
@@ -2974,6 +3508,9 @@
           if (activePanel) { document.getElementById(activePanel).classList.remove('open'); activePanel = null; }
           document.getElementById('bubble').classList.remove('show');
           ctx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
+          visitorWrap.classList.remove('show');
+          visitorCtx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
+          visitorState = null;
         }
       });
 

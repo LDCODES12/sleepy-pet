@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain, Notification, globalShortcut } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { createMacUpdater } = require('./mac-updater');
+const crypto = require('crypto');
 const path = require('path');
 
 let mainWindow;
@@ -9,6 +10,17 @@ let tray;
 let mochiHidden = false;
 let macUpdater;
 let windowsUpdateState = { status: 'idle', version: null };
+let petMessageConfig = {
+  userId: null,
+  catName: 'Mochi',
+  relayUrl: '',
+  appearance: {}
+};
+let petMessagePollTimer = null;
+let petMessageStreamController = null;
+let petMessageStreamRestartTimer = null;
+let petMessageLastPollAt = 0;
+const seenPetMessageIds = new Set();
 
 // Window large enough for room view (340x440) but starts showing only the cat
 const WIN_W = 340;
@@ -33,6 +45,14 @@ const FOLLOW_TICK_MS = 16;
 const FOLLOW_LERP = 0.2;
 const FOLLOW_MAX_STEP = 96;
 const FOLLOW_SCREEN_OVERSCAN = 96;
+const PET_MESSAGE_POLL_MS = 8000;
+const PET_MESSAGE_TIMEOUT_MS = 8000;
+const PET_MESSAGE_MAX_TEXT = 180;
+const PET_MESSAGE_MAX_NAME = 24;
+const PET_MESSAGE_MAX_ID = 64;
+const PET_MESSAGE_DEFAULT_RELAY_URL = 'https://ntfy.sh';
+const PET_MESSAGE_NTFY_CATCHUP = '10m';
+const PET_MESSAGE_TOPIC_PREFIX = 'sleepy-pet-';
 
 app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
@@ -123,6 +143,7 @@ function createWindow() {
   mainWindow.webContents.on('did-finish-load', () => {
     broadcastFollowState();
     broadcastUpdateState();
+    broadcastPetMessageStatus();
   });
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setAlwaysOnTop(true, 'floating');
@@ -411,6 +432,375 @@ function installUpdateNow() {
   }
 }
 
+function sanitizeText(value, maxLength) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function sanitizeMessageId(value) {
+  return sanitizeText(value, PET_MESSAGE_MAX_ID)
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, PET_MESSAGE_MAX_ID);
+}
+
+function sanitizeRelayUrl(value) {
+  const raw = String(value || process.env.SLEEPY_PET_MESSAGE_RELAY_URL || PET_MESSAGE_DEFAULT_RELAY_URL).trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+function sanitizeAppearance(appearance = {}) {
+  const selectedRibbon = sanitizeText(appearance.selectedRibbon, 18);
+  const selectedSkin = sanitizeText(appearance.selectedSkin, 40);
+  return {
+    selectedRibbon: selectedRibbon || null,
+    selectedSkin: selectedSkin || null
+  };
+}
+
+function sanitizePetMessageConfig(config = {}) {
+  return {
+    userId: sanitizeMessageId(config.userId),
+    catName: sanitizeText(config.catName || 'Mochi', PET_MESSAGE_MAX_NAME) || 'Mochi',
+    relayUrl: sanitizeRelayUrl(config.relayUrl),
+    appearance: sanitizeAppearance(config.appearance)
+  };
+}
+
+function makePetMessageId() {
+  return `msg-${Date.now().toString(36)}-${crypto.randomBytes(5).toString('hex')}`;
+}
+
+function sanitizePetMessage(message = {}) {
+  const from = message.from || {};
+  const fromId = sanitizeMessageId(from.id || from.userId || message.fromId || message.fromUserId || petMessageConfig.userId);
+  const fromCatName = sanitizeText(from.catName || message.catName || 'Mochi', PET_MESSAGE_MAX_NAME) || 'Mochi';
+  const text = sanitizeText(message.text || message.message, PET_MESSAGE_MAX_TEXT);
+
+  return {
+    id: sanitizeMessageId(message.id) || makePetMessageId(),
+    to: sanitizeMessageId(message.to || message.recipientId),
+    text,
+    sentAt: sanitizeText(message.sentAt, 40) || new Date().toISOString(),
+    demo: Boolean(message.demo),
+    from: {
+      id: fromId,
+      catName: fromCatName,
+      appearance: sanitizeAppearance(from.appearance || message.appearance)
+    }
+  };
+}
+
+function petMessageRelayUrl(pathname = 'messages') {
+  if (!petMessageConfig.relayUrl) return null;
+  const base = petMessageConfig.relayUrl.endsWith('/')
+    ? petMessageConfig.relayUrl
+    : `${petMessageConfig.relayUrl}/`;
+  return new URL(pathname.replace(/^\//, ''), base);
+}
+
+function petMessageRelayKind() {
+  if (!petMessageConfig.relayUrl) return 'preview';
+  try {
+    const url = new URL(petMessageConfig.relayUrl);
+    if (url.hostname === 'ntfy.sh' || url.pathname.endsWith('/ntfy')) return 'ntfy';
+  } catch {}
+  return 'sleepy';
+}
+
+function petMessageTopicForUser(userId) {
+  const safeId = sanitizeMessageId(userId).toLowerCase();
+  return `${PET_MESSAGE_TOPIC_PREFIX}${safeId}`.slice(0, 64);
+}
+
+function petMessageNtfyUrl(userId, format = '') {
+  if (!petMessageConfig.relayUrl) return null;
+  const base = petMessageConfig.relayUrl.endsWith('/')
+    ? petMessageConfig.relayUrl
+    : `${petMessageConfig.relayUrl}/`;
+  const topic = petMessageTopicForUser(userId);
+  return new URL(`${encodeURIComponent(topic)}${format}`, base);
+}
+
+async function fetchPetMessageJson(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PET_MESSAGE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        accept: 'application/json',
+        ...(options.body ? { 'content-type': 'application/json' } : {}),
+        ...(options.headers || {})
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Relay responded with ${response.status}`);
+    }
+    return response.status === 204 ? null : response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchPetMessageText(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PET_MESSAGE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      throw new Error(`Relay responded with ${response.status}`);
+    }
+    return response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function rememberPetMessageId(id) {
+  if (!id) return;
+  seenPetMessageIds.add(id);
+  if (seenPetMessageIds.size <= 200) return;
+  const oldest = seenPetMessageIds.values().next().value;
+  seenPetMessageIds.delete(oldest);
+}
+
+function broadcastPetMessageStatus(extra = {}) {
+  const relayUrl = petMessageConfig.relayUrl || '';
+  mainWindow?.webContents.send('pet-message-status', {
+    relayEnabled: Boolean(relayUrl),
+    relayKind: petMessageRelayKind(),
+    relayUrl,
+    userId: petMessageConfig.userId || null,
+    ...extra
+  });
+}
+
+function deliverPetMessage(message) {
+  const safeMessage = sanitizePetMessage(message);
+  if (!safeMessage.text) return false;
+  rememberPetMessageId(safeMessage.id);
+  if (mochiHidden) showMochi();
+  mainWindow?.webContents.send('pet-message-received', safeMessage);
+  return true;
+}
+
+async function pollPetMessages() {
+  if (!petMessageConfig.userId || !petMessageConfig.relayUrl) return;
+
+  const url = petMessageRelayUrl('messages');
+  if (!url) return;
+  url.searchParams.set('to', petMessageConfig.userId);
+  if (petMessageLastPollAt) {
+    url.searchParams.set('since', String(petMessageLastPollAt));
+  }
+
+  try {
+    const payload = await fetchPetMessageJson(url);
+    const messages = Array.isArray(payload) ? payload : (payload?.messages || []);
+    for (const rawMessage of messages) {
+      const message = sanitizePetMessage(rawMessage);
+      if (!message.text || !message.id || seenPetMessageIds.has(message.id)) continue;
+      if (message.to && message.to !== petMessageConfig.userId) continue;
+      deliverPetMessage(message);
+    }
+    petMessageLastPollAt = Date.now();
+    broadcastPetMessageStatus({ status: 'connected' });
+  } catch (error) {
+    broadcastPetMessageStatus({
+      status: 'error',
+      error: sanitizeText(error.message || error, 120)
+    });
+  }
+}
+
+function handleNtfyPetMessageLine(line) {
+  if (!line) return;
+  let event;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    return;
+  }
+  if (event.event === 'open') {
+    broadcastPetMessageStatus({ status: 'connected', relayKind: 'ntfy' });
+    return;
+  }
+  if (event.event !== 'message' || !event.message) return;
+
+  let rawMessage;
+  try {
+    rawMessage = JSON.parse(event.message);
+  } catch {
+    return;
+  }
+
+  const message = sanitizePetMessage(rawMessage);
+  if (!message.text || !message.id || seenPetMessageIds.has(message.id)) return;
+  if (message.to && message.to !== petMessageConfig.userId) return;
+  deliverPetMessage(message);
+}
+
+async function startNtfyPetMessageStream() {
+  if (!petMessageConfig.userId || !petMessageConfig.relayUrl) return;
+  const url = petMessageNtfyUrl(petMessageConfig.userId, '/json');
+  if (!url) return;
+  url.searchParams.set('since', PET_MESSAGE_NTFY_CATCHUP);
+
+  petMessageStreamController = new AbortController();
+  const controller = petMessageStreamController;
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`Relay responded with ${response.status}`);
+    if (!response.body?.getReader) throw new Error('Relay stream is not available');
+
+    broadcastPetMessageStatus({ status: 'connected', relayKind: 'ntfy' });
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (!controller.signal.aborted) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        handleNtfyPetMessageLine(line);
+      }
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      broadcastPetMessageStatus({
+        status: 'error',
+        relayKind: 'ntfy',
+        error: sanitizeText(error.message || error, 120)
+      });
+    }
+  } finally {
+    if (petMessageStreamController === controller) {
+      petMessageStreamController = null;
+    }
+    if (!controller.signal.aborted && petMessageRelayKind() === 'ntfy') {
+      petMessageStreamRestartTimer = setTimeout(startNtfyPetMessageStream, 4000);
+    }
+  }
+}
+
+function stopPetMessagePolling() {
+  if (petMessagePollTimer) {
+    clearInterval(petMessagePollTimer);
+    petMessagePollTimer = null;
+  }
+  if (petMessageStreamRestartTimer) {
+    clearTimeout(petMessageStreamRestartTimer);
+    petMessageStreamRestartTimer = null;
+  }
+  if (petMessageStreamController) {
+    petMessageStreamController.abort();
+    petMessageStreamController = null;
+  }
+}
+
+function startPetMessagePolling() {
+  stopPetMessagePolling();
+  if (!petMessageConfig.userId || !petMessageConfig.relayUrl) {
+    broadcastPetMessageStatus({ status: petMessageConfig.relayUrl ? 'missing-code' : 'preview' });
+    return;
+  }
+  if (petMessageRelayKind() === 'ntfy') {
+    broadcastPetMessageStatus({ status: 'connecting', relayKind: 'ntfy' });
+    startNtfyPetMessageStream();
+    return;
+  }
+  pollPetMessages();
+  petMessagePollTimer = setInterval(pollPetMessages, PET_MESSAGE_POLL_MS);
+}
+
+async function sendPetMessage(payload) {
+  const message = sanitizePetMessage({
+    ...payload,
+    from: {
+      id: petMessageConfig.userId,
+      catName: petMessageConfig.catName,
+      appearance: petMessageConfig.appearance,
+      ...(payload?.from || {})
+    }
+  });
+
+  if (!message.to) {
+    return { ok: false, error: 'Choose a friend code first.' };
+  }
+  if (!message.text) {
+    return { ok: false, error: 'Write a message first.' };
+  }
+
+  if (petMessageRelayKind() === 'ntfy') {
+    const url = petMessageNtfyUrl(message.to);
+    if (!url) return { ok: false, error: 'Relay is not ready yet.' };
+    try {
+      await fetchPetMessageText(url, {
+        method: 'POST',
+        headers: {
+          title: message.from.catName,
+          tags: 'cat'
+        },
+        body: JSON.stringify(message)
+      });
+      return { ok: true, mode: 'ntfy', message: 'Sent.' };
+    } catch (error) {
+      return {
+        ok: false,
+        error: sanitizeText(error.message || error, 120)
+      };
+    }
+  }
+
+  const url = petMessageRelayUrl('messages');
+  if (!url) {
+    setTimeout(() => {
+      deliverPetMessage({
+        ...message,
+        to: petMessageConfig.userId,
+        demo: true
+      });
+    }, 550);
+    return {
+      ok: true,
+      mode: 'preview',
+      message: 'No relay is set, so Mochi previewed it here.'
+    };
+  }
+
+  try {
+    await fetchPetMessageJson(url, {
+      method: 'POST',
+      body: JSON.stringify(message)
+    });
+    return { ok: true, mode: 'relay', message: 'Sent.' };
+  } catch (error) {
+    return {
+      ok: false,
+      error: sanitizeText(error.message || error, 120)
+    };
+  }
+}
+
 function setFollowMouseEnabled(enabled) {
   const wasEnabled = followMouse;
   if (enabled === wasEnabled) {
@@ -457,6 +847,22 @@ ipcMain.on('toggle-follow', (_, enabled) => {
   setFollowMouseEnabled(enabled);
 });
 
+ipcMain.handle('configure-pet-messages', (_, config) => {
+  petMessageConfig = sanitizePetMessageConfig(config);
+  petMessageLastPollAt = 0;
+  seenPetMessageIds.clear();
+  startPetMessagePolling();
+  return {
+    ok: true,
+    relayEnabled: Boolean(petMessageConfig.relayUrl),
+    relayKind: petMessageRelayKind(),
+    relayUrl: petMessageConfig.relayUrl,
+    userId: petMessageConfig.userId
+  };
+});
+
+ipcMain.handle('send-pet-message', (_, payload) => sendPetMessage(payload));
+
 ipcMain.on('open-room', (_, mode) => createRoomWindow(mode));
 ipcMain.on('quit-app', () => app.quit());
 ipcMain.on('hide-mochi', () => hideMochi());
@@ -466,6 +872,7 @@ ipcMain.on('notify', (_, { title, body }) => {
 });
 
 app.on('before-quit', () => {
+  stopPetMessagePolling();
   macUpdater?.installOnQuit();
 });
 app.on('will-quit', () => globalShortcut.unregisterAll());
