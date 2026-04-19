@@ -2,6 +2,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain, Notificati
 const { autoUpdater } = require('electron-updater');
 const { createMacUpdater } = require('./mac-updater');
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 
 let mainWindow;
@@ -9,6 +10,8 @@ let roomWindow;
 let tray;
 let mochiHidden = false;
 let macUpdater;
+let updateCheckTimer = null;
+const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 let windowsUpdateState = { status: 'idle', version: null };
 let petMessageConfig = {
   userId: null,
@@ -68,19 +71,54 @@ app.whenReady().then(() => {
   });
 });
 
+function createUpdaterLogger() {
+  const logPath = path.join(app.getPath('userData'), 'mac-updater.log');
+  const format = (level, args) => {
+    const body = args.map(arg => {
+      if (arg instanceof Error) return arg.stack || arg.message;
+      if (typeof arg === 'string') return arg;
+      try { return JSON.stringify(arg); } catch { return String(arg); }
+    }).join(' ');
+    return `[${new Date().toISOString()}] [${level}] ${body}\n`;
+  };
+  const append = (level, args) => {
+    const line = format(level, args);
+    try { fs.appendFileSync(logPath, line); } catch { /* ignore log write failures */ }
+    if (level === 'warn' || level === 'error') console.error(line.trimEnd());
+    else console.log(line.trimEnd());
+  };
+  return {
+    info: (...a) => append('info', a),
+    warn: (...a) => append('warn', a),
+    error: (...a) => append('error', a)
+  };
+}
+
 function setupAutoUpdates() {
   if (process.platform === 'darwin') {
+    const logger = createUpdaterLogger();
     macUpdater = createMacUpdater({
       app,
       Notification,
+      logger,
       onStateChange: () => {
         updateTrayMenu();
         broadcastUpdateState();
       }
     });
+    // Clean any leftover staging directories from a prior install cycle
+    // before anything else happens. This is the fix for the 1.2.8→1.2.9
+    // stuck-update bug: a held-open file inside pending-mac-update/ blocked
+    // the first rm in downloadAndPrepareUpdate and the check bailed silently.
+    macUpdater.cleanStaleStaging().catch(() => {});
     setTimeout(() => {
       macUpdater.checkForUpdates({ silent: false }).catch(() => {});
     }, 3000);
+    // Retry periodically so a single transient failure (network blip, stale
+    // redirect, busy file) doesn't leave us stuck until the next relaunch.
+    updateCheckTimer = setInterval(() => {
+      macUpdater.checkForUpdates({ silent: true }).catch(() => {});
+    }, UPDATE_CHECK_INTERVAL_MS);
     return;
   }
 
@@ -196,24 +234,31 @@ function updateTrayMenu() {
     { label: 'Reset Position', click: resetPosition }
   ];
 
+  items.push({ type: 'separator' });
   if (updateState?.status === 'ready') {
-    items.push(
-      { type: 'separator' },
-      {
-        label: `Restart to Update ${updateState.version || ''}`.trim(),
-        click: installUpdateNow
-      }
-    );
-  } else if (updateState?.status === 'downloading' || updateState?.status === 'checking') {
-    items.push(
-      { type: 'separator' },
-      {
-        label: updateState.version
-          ? `Downloading Update ${updateState.version}`
-          : 'Checking for Update...',
-        enabled: false
-      }
-    );
+    items.push({
+      label: `Restart to Update ${updateState.version || ''}`.trim(),
+      click: installUpdateNow
+    });
+  } else if (updateState?.status === 'downloading') {
+    items.push({
+      label: updateState.version
+        ? `Downloading Update ${updateState.version}\u2026`
+        : 'Downloading Update\u2026',
+      enabled: false
+    });
+  } else if (updateState?.status === 'checking') {
+    items.push({ label: 'Checking for Update\u2026', enabled: false });
+  } else if (updateState?.status === 'error') {
+    items.push({
+      label: 'Update check failed — Retry',
+      click: triggerManualUpdateCheck
+    });
+  } else {
+    items.push({
+      label: 'Check for Updates',
+      click: triggerManualUpdateCheck
+    });
   }
 
   items.push(
@@ -431,6 +476,14 @@ function installUpdateNow() {
   if (windowsUpdateState.status === 'ready') {
     autoUpdater.quitAndInstall();
   }
+}
+
+function triggerManualUpdateCheck() {
+  if (process.platform === 'darwin') {
+    macUpdater?.checkForUpdates?.({ silent: false }).catch(() => {});
+    return;
+  }
+  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
 }
 
 function sanitizeText(value, maxLength) {
@@ -885,6 +938,7 @@ ipcMain.on('notify', (_, { title, body }) => {
 
 app.on('before-quit', () => {
   stopPetMessagePolling();
+  if (updateCheckTimer) { clearInterval(updateCheckTimer); updateCheckTimer = null; }
   macUpdater?.installOnQuit();
 });
 app.on('will-quit', () => globalShortcut.unregisterAll());
