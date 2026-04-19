@@ -20,6 +20,7 @@ let petMessagePollTimer = null;
 let petMessageStreamController = null;
 let petMessageStreamRestartTimer = null;
 let petMessageLastPollAt = 0;
+let petMessageInboxKey = '';
 const seenPetMessageIds = new Set();
 
 // Window large enough for room view (340x440) but starts showing only the cat
@@ -574,9 +575,14 @@ async function fetchPetMessageText(url, options = {}) {
 function rememberPetMessageId(id) {
   if (!id) return;
   seenPetMessageIds.add(id);
-  if (seenPetMessageIds.size <= 200) return;
+  if (seenPetMessageIds.size <= 500) return;
   const oldest = seenPetMessageIds.values().next().value;
   seenPetMessageIds.delete(oldest);
+}
+
+function petMessageInboxKeyForConfig(config = petMessageConfig) {
+  if (!config.userId || !config.relayUrl) return '';
+  return `${sanitizeRelayUrl(config.relayUrl)}:${sanitizeMessageId(config.userId).toLowerCase()}`;
 }
 
 function broadcastPetMessageStatus(extra = {}) {
@@ -848,9 +854,15 @@ ipcMain.on('toggle-follow', (_, enabled) => {
 });
 
 ipcMain.handle('configure-pet-messages', (_, config) => {
-  petMessageConfig = sanitizePetMessageConfig(config);
-  petMessageLastPollAt = 0;
-  seenPetMessageIds.clear();
+  const nextConfig = sanitizePetMessageConfig(config);
+  const nextInboxKey = petMessageInboxKeyForConfig(nextConfig);
+  const inboxChanged = nextInboxKey !== petMessageInboxKey;
+  petMessageConfig = nextConfig;
+  petMessageInboxKey = nextInboxKey;
+  if (inboxChanged) {
+    petMessageLastPollAt = 0;
+    seenPetMessageIds.clear();
+  }
   startPetMessagePolling();
   return {
     ok: true,

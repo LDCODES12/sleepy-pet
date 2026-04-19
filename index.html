@@ -328,6 +328,30 @@
 
     /* ── Settings (retro pixel style) ── */
     #settings-panel { width: 168px; }
+    .settings-input {
+      width: 100%;
+      min-width: 0;
+      height: 23px;
+      border: 0;
+      border-radius: 0;
+      background: #fff7df;
+      color: #4b3528;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0;
+      padding: 4px 7px;
+      outline: none;
+      box-shadow:
+        0 0 0 1px #8f6d4d,
+        inset 0 -2px 0 #d6c08b;
+    }
+    .settings-input:focus {
+      box-shadow:
+        0 0 0 1px #2d2524,
+        0 0 0 2px #ffd96b,
+        inset 0 -2px 0 #d6c08b;
+    }
     .lbl {
       display: block; font-size: 7px; text-transform: uppercase;
       letter-spacing: 1.2px; color: #8f6d4d;
@@ -542,6 +566,12 @@
     .msg-small-btn:active {
       transform: translate(1px, 1px);
     }
+    .msg-send-btn:disabled,
+    .msg-small-btn:disabled {
+      cursor: default;
+      opacity: 0.55;
+      transform: none;
+    }
     .msg-status {
       min-height: 24px;
       margin-top: 8px;
@@ -576,7 +606,7 @@
   <!-- Menu -->
   <div class="menu" id="menu">
     <button class="menu-btn" data-action="goodnight" id="goodnight-btn">Goodnight</button>
-    <button class="menu-btn" data-action="settings">Sleep</button>
+    <button class="menu-btn" data-action="settings">Settings</button>
     <button class="menu-btn" data-action="room">Edit Room</button>
     <button class="menu-btn" data-action="viewroom" id="viewroom-btn">View Room</button>
     <button class="menu-btn" data-action="messages">Messages</button>
@@ -589,7 +619,9 @@
 
   <!-- Settings -->
   <div class="panel" id="settings-panel">
-    <div class="panel-header"><h3>Sleep</h3><button class="panel-close" data-panel="settings-panel">&times;</button></div>
+    <div class="panel-header"><h3>Settings</h3><button class="panel-close" data-panel="settings-panel">&times;</button></div>
+    <span class="lbl">Cat name</span>
+    <input class="settings-input" id="message-cat-name" maxlength="24" spellcheck="false">
     <span class="lbl">Bedtime</span>
     <div class="time-row">
       <button class="time-btn" data-target="bedtime" data-dir="-1">-</button>
@@ -626,8 +658,6 @@
   <!-- Messages -->
   <div class="panel" id="messages-panel">
     <div class="panel-header"><h3>Messages</h3><button class="panel-close" data-panel="messages-panel">&times;</button></div>
-    <span class="lbl">Cat name</span>
-    <input class="msg-input" id="message-cat-name" maxlength="24" spellcheck="false">
     <span class="lbl">Your code</span>
     <div class="msg-code-row">
       <input class="msg-input msg-code" id="message-user-id" readonly spellcheck="false">
@@ -858,6 +888,7 @@
 
     // Visiting cats deliver messages from friends.
     const visitorQueue = [];
+    const visitorSeenIds = new Set();
     let visitorState = null;
     let visitorAtlasImg = null;
     let visitorAtlasKey = '';
@@ -906,6 +937,11 @@
     function queueVisitorMessage(message) {
       const next = normalizeReceivedPetMessage(message);
       if (!next.text) return;
+      if (visitorSeenIds.has(next.id)) return;
+      visitorSeenIds.add(next.id);
+      if (visitorSeenIds.size > 300) {
+        visitorSeenIds.delete(visitorSeenIds.values().next().value);
+      }
       visitorQueue.push(next);
       if (!visitorState) startNextVisitorMessage(performance.now());
     }
@@ -1448,6 +1484,8 @@
     let followingMouse = localStorage.getItem('followMouse') === 'true';
     let showingRoom = localStorage.getItem('showRoom') === 'true';
     let updateReadyVersion = null;
+    let updateNoticeKey = '';
+    let updateNoticeText = '';
     let updateNagNeedsAck = false;
 
     function applyFollowState(enabled) {
@@ -1480,25 +1518,51 @@
       updateBtn.textContent = `Restart to Update ${updateReadyVersion}`;
     }
 
+    function updateNoticeForState(state) {
+      const status = state?.status || 'idle';
+      const version = state?.version || '';
+      if (status === 'downloading') {
+        return version
+          ? `i found update ${version}~ downloading it now`
+          : 'i found an update~ downloading it now';
+      }
+      if (status === 'ready' || state?.ready) {
+        return version
+          ? `update ${version} is ready~ restart from menu`
+          : 'new update is ready~ restart from menu';
+      }
+      return '';
+    }
+
+    function showPendingUpdateNoticeSoon() {
+      if (!updateNagNeedsAck || !updateNoticeText) return;
+      setTimeout(() => showBubble(), 140);
+    }
+
     function acknowledgeUpdateNag() {
       if (!updateNagNeedsAck) return;
-      updateNagNeedsAck = false;
       const bubble = document.getElementById('bubble');
-      if (bubble.classList.contains('show') && /update/i.test(bubble.textContent || '')) {
-        bubble.classList.remove('show');
-      }
+      const showingUpdateNotice = bubble.classList.contains('show') && bubble.textContent === updateNoticeText;
+      if (!showingUpdateNotice) return;
+      updateNagNeedsAck = false;
+      bubble.classList.remove('show');
     }
 
     function applyUpdateState(state) {
       const nextVersion = state?.ready ? (state.version || 'new version') : null;
-      const becameReady = !updateReadyVersion && !!nextVersion;
-      const changedVersion = !!(updateReadyVersion && nextVersion && updateReadyVersion !== nextVersion);
+      const noticeText = updateNoticeForState(state);
+      const noticeKey = noticeText ? `${state?.status || 'idle'}:${state?.version || 'new version'}` : '';
       updateReadyVersion = nextVersion;
-      if (becameReady || changedVersion) {
+
+      if (noticeText && noticeKey !== updateNoticeKey) {
+        updateNoticeKey = noticeKey;
+        updateNoticeText = noticeText;
         updateNagNeedsAck = true;
         showBubble();
       }
-      if (!updateReadyVersion) {
+      if (!noticeText && (state?.status || 'idle') === 'idle') {
+        updateNoticeKey = '';
+        updateNoticeText = '';
         updateNagNeedsAck = false;
       }
       refreshUpdateButton();
@@ -1517,6 +1581,7 @@
     const DEFAULT_MESSAGE_RELAY_URL = 'https://ntfy.sh';
     const MESSAGE_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let messageRelayStatus = { relayEnabled: true, relayKind: 'ntfy', status: 'idle' };
+    let messageSendInFlight = false;
 
     function randomMessageCodePart(len) {
       let value = '';
@@ -1657,9 +1722,12 @@
     }
 
     function sendPetMessageFromPanel(previewOnly) {
+      if (messageSendInFlight) return;
       const profile = messageProfile();
       const toEl = document.getElementById('message-to');
       const textEl = document.getElementById('message-text');
+      const sendBtn = document.getElementById('message-send');
+      const previewBtn = document.getElementById('message-preview');
       const to = previewOnly ? profile.userId : normalizeMessageCode(toEl.value);
       const text = textEl.value.trim().slice(0, 180);
       if (!text) {
@@ -1672,6 +1740,9 @@
       }
       localStorage.setItem('messageLastTo', to);
       messageStatus(previewOnly ? 'Previewing...' : 'Sending...');
+      messageSendInFlight = true;
+      if (sendBtn) sendBtn.disabled = true;
+      if (previewBtn) previewBtn.disabled = true;
       window.electronAPI?.sendPetMessage?.({
         id: 'msg-' + Date.now().toString(36) + '-' + randomMessageCodePart(4).toLowerCase(),
         to,
@@ -1690,6 +1761,10 @@
         if (!previewOnly) textEl.value = '';
       }).catch((error) => {
         messageStatus('Could not send: ' + String(error?.message || error), true);
+      }).finally(() => {
+        messageSendInFlight = false;
+        if (sendBtn) sendBtn.disabled = false;
+        if (previewBtn) previewBtn.disabled = false;
       });
     }
 
@@ -3160,9 +3235,9 @@
 
     function showBubble() {
       if (mochiHidden || menuOpen || activePanel) return;
-      if (updateReadyVersion && updateNagNeedsAck) {
+      if (updateNagNeedsAck && updateNoticeText) {
         const b = document.getElementById('bubble');
-        b.textContent = `new update ${updateReadyVersion} is ready~ tap me then restart in menu`;
+        b.textContent = updateNoticeText;
         b.classList.add('show');
         positionBubble();
         clearTimeout(bubbleTimer);
@@ -3212,6 +3287,7 @@
       menuOpen = !menuOpen;
       document.getElementById('menu').classList.toggle('open', menuOpen);
       document.getElementById('bubble').classList.remove('show');
+      if (!menuOpen) showPendingUpdateNoticeSoon();
     }
 
     function openPanel(id) {
@@ -3225,6 +3301,7 @@
     function closePanel() {
       if (activePanel) document.getElementById(activePanel).classList.remove('open');
       activePanel = null;
+      showPendingUpdateNoticeSoon();
     }
 
     function fmt12(timeStr) {
@@ -3634,7 +3711,7 @@
 
       setInterval(showBubble, 90000);
       setInterval(() => {
-        if (updateReadyVersion && updateNagNeedsAck) showBubble();
+        if (updateNagNeedsAck && updateNoticeText) showBubble();
       }, 30000);
       setInterval(checkState, 15000); // check more often for bedtime reminders
     }
