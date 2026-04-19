@@ -26,24 +26,25 @@ let petMessageLastPollAt = 0;
 let petMessageInboxKey = '';
 const seenPetMessageIds = new Set();
 
-// Window large enough for room view (340x440) but starts showing only the cat
-const WIN_W = 340;
+// Window large enough for room view (340x440) plus a wider cat stage so
+// long-tail frames are not clipped by the transparent window bounds.
+const WIN_W = 372;
 const WIN_H = 440;
 
 // Keep these in sync with the visible cat canvas in index.html.
-const CAT_STAGE_W = 96;
+const CAT_STAGE_W = 128;
 const CAT_STAGE_H = 80;
 const CAT_CANVAS_LEFT = WIN_W + 12 - CAT_STAGE_W; // CSS right:-12px
 const CAT_CANVAS_TOP = WIN_H - 4 - CAT_STAGE_H; // CSS bottom:4px
-const CAT_CENTER_X = CAT_CANVAS_LEFT + 48;
-const CAT_FACE_LEFT_X = CAT_CANVAS_LEFT + 21;
-const CAT_FACE_RIGHT_X = CAT_CANVAS_LEFT + 70;
+const CAT_CENTER_X = CAT_CANVAS_LEFT + 80;
+const CAT_FACE_LEFT_X = CAT_CANVAS_LEFT + 53;
+const CAT_FACE_RIGHT_X = CAT_CANVAS_LEFT + 102;
 const CAT_FACE_Y = CAT_CANVAS_TOP + 37;
 // Follow mode pins the cat canvas to the top-left of the window in renderer,
 // so use local canvas coordinates for target math.
-const FOLLOW_CAT_CENTER_X = 48;
-const FOLLOW_CAT_FACE_LEFT_X = 21;
-const FOLLOW_CAT_FACE_RIGHT_X = 70;
+const FOLLOW_CAT_CENTER_X = 80;
+const FOLLOW_CAT_FACE_LEFT_X = 53;
+const FOLLOW_CAT_FACE_RIGHT_X = 102;
 const FOLLOW_CAT_FACE_Y = 37;
 const FOLLOW_TICK_MS = 16;
 const FOLLOW_LERP = 0.2;

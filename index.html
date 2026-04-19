@@ -6,13 +6,13 @@
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { background: transparent; overflow: hidden; user-select: none; font-family: -apple-system, sans-serif; }
-    body { width: 340px; height: 440px; }
+    body { width: 372px; height: 440px; }
 
     /* ── Cat canvas ── */
     #cat-canvas {
       position: absolute;
       bottom: 4px; right: -12px;
-      width: 96px; height: 80px;
+      width: 128px; height: 80px;
       image-rendering: pixelated;
       cursor: pointer;
       background: transparent;
@@ -701,7 +701,7 @@
 </head>
 <body>
   <!-- Cat -->
-  <canvas id="cat-canvas" width="96" height="80"></canvas>
+  <canvas id="cat-canvas" width="128" height="80"></canvas>
   <div id="room-view-wrap">
     <canvas id="room-view" width="256" height="256"></canvas>
   </div>
@@ -835,9 +835,12 @@
     const visitorNameEl = document.getElementById('visitor-name');
     const visitorBubbleEl = document.getElementById('visitor-bubble');
     const CAT_RENDER_SCALE = 2;
-    const CAT_STAGE_W = 96;
+    const CAT_STAGE_W = 128;
     const CAT_STAGE_H = 80;
-    const CAT_STAGE_ANCHOR = { x: 48, y: 78 };
+    const CAT_STAGE_ANCHOR = { x: 80, y: 78 };
+    const VISITOR_STAGE_W = 96;
+    const VISITOR_STAGE_H = 80;
+    const VISITOR_STAGE_ANCHOR = { x: 48, y: 78 };
     const CAT_WORLD_ANCHOR = { x: 15.5, y: 31 };
     const CAT_HEAD_ANCHOR_MAX_Y = 18;
     const SPRITE_ALPHA_THRESHOLD = 20;
@@ -939,6 +942,7 @@
     }
 
     let curAnim = 'idle', frame = 0, lastT = 0, animCb = null;
+    let loopResumeRequest = null;
     let catFlip = false; // true = face left
     let mochiHidden = false; // true when hidden via tray/menu
 
@@ -1101,16 +1105,16 @@
         visitorState.frame = (visitorState.frame + 1) % anim.frames;
       }
 
-      visitorCtx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
+      visitorCtx.clearRect(0, 0, VISITOR_STAGE_W, VISITOR_STAGE_H);
       const f = Math.min(visitorState.frame, anim.frames - 1);
       const row = ATLAS_ANIM_ROWS.excited;
       const flip = visitorState.side === 'right';
       if (visitorAtlasImg && row !== undefined) {
         const anchor = getAnimationAnchor(visitorAtlasImg, 'excited', row, 'visitor:' + visitorAtlasKey);
-        drawAnchoredFrame(visitorCtx, visitorAtlasImg, f * S, row * S, anchor, CAT_RENDER_SCALE, CAT_STAGE_ANCHOR.x, CAT_STAGE_ANCHOR.y, flip);
+        drawAnchoredFrame(visitorCtx, visitorAtlasImg, f * S, row * S, anchor, CAT_RENDER_SCALE, VISITOR_STAGE_ANCHOR.x, VISITOR_STAGE_ANCHOR.y, flip);
       } else if (imgs.excited) {
         const anchor = getAnimationAnchor(imgs.excited, 'excited', 0, 'visitor:classic');
-        drawAnchoredFrame(visitorCtx, imgs.excited, f * S, 0, anchor, CAT_RENDER_SCALE, CAT_STAGE_ANCHOR.x, CAT_STAGE_ANCHOR.y, flip);
+        drawAnchoredFrame(visitorCtx, imgs.excited, f * S, 0, anchor, CAT_RENDER_SCALE, VISITOR_STAGE_ANCHOR.x, VISITOR_STAGE_ANCHOR.y, flip);
       }
     }
 
@@ -1123,7 +1127,7 @@
       const elapsed = t - visitorState.startedAt;
       if (elapsed >= visitorState.duration) {
         visitorWrap.classList.remove('show');
-        visitorCtx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
+        visitorCtx.clearRect(0, 0, VISITOR_STAGE_W, VISITOR_STAGE_H);
         visitorState = null;
         if (visitorQueue.length) setTimeout(() => startNextVisitorMessage(performance.now()), 350);
         return;
@@ -1154,26 +1158,18 @@
 
       if (followingMouse) keepFollowExcited();
 
-      // Auto-return from click animation — re-evaluate state so we
-      // resume the correct animation (e.g. sick if overtired).
-      if (clickAnimEnd && t >= clickAnimEnd) {
-        clickAnimEnd = 0;
-        const prev = state;
-        state = '';
-        checkState();
-        if (!state) setState(prev || 'awake');
-      }
-
       const a = ANIMS[curAnim], img = imgs[curAnim];
       if (!a || !img) { requestAnimationFrame(tick); return; }
 
       // Advance frame on timer
       if (t - lastT >= a.speed) {
+        const completedAnim = curAnim;
         lastT = t;
         frame++;
         if (frame >= a.frames) {
           if (a.once && animCb) { const cb = animCb; animCb = null; cb(); }
           frame = 0;
+          finishLoopResumeIfReady(t, completedAnim);
         }
       }
 
@@ -1201,6 +1197,7 @@
 
     function play(name, cb) {
       if (!ANIMS[name]) return;
+      loopResumeRequest = null;
       curAnim = name; frame = 0; lastT = 0; animCb = cb || null;
     }
 
@@ -1259,11 +1256,13 @@
         "you matter more than you know",
         "mew~",
         "just checking in on you",
-        "remember to drink water",
+        "treat yourself with kindness",
         "you've got this",
-        "hey, you're enough",
+        "don't forget to take breaks",
         "one step at a time",
-        "be gentle with yourself",
+        "give yourself credit for the little things",
+        "remember to breathe",
+        "give yourself grace",
       ],
       drowsy: [
         "it's getting late...",
@@ -1271,11 +1270,11 @@
         "wind down a little?",
         "rest is productive too",
         "mew... sleepy time soon",
-        "you did enough today",
+        "you did a lot today",
       ],
       sleepy: [
         "please go to bed",
-        "sleep is important, really",
+        "sleep is so important",
         "tomorrow needs you rested",
         "you'll feel so much better",
         "zzz... bed... now...",
@@ -1328,22 +1327,78 @@
 
     // Animation cycling — Mochi does random things based on state
     let idleTimer = null;
-    let awakeAnimTimer = null;
     let awakePicksSinceLick = 0;
     const AWAKE_ANIM_MAX_MS = 7000;
     const CAPPED_AWAKE_ANIMS = new Set(['waiting', 'dance', 'surprised', 'lick', 'shy']);
 
+    function clearLoopResumeRequest() {
+      loopResumeRequest = null;
+    }
+
     function clearAwakeAnimTimer() {
-      if (awakeAnimTimer) {
-        clearTimeout(awakeAnimTimer);
-        awakeAnimTimer = null;
-      }
+      clearLoopResumeRequest();
+    }
+
+    function resumeFromTemporaryAnimation() {
+      const prev = state;
+      state = '';
+      checkState();
+      if (!state) setState(prev || 'awake');
+    }
+
+    function resumeAtCurrentLoopEnd(afterMs, cb) {
+      loopResumeRequest = {
+        anim: curAnim,
+        earliestAt: performance.now() + Math.max(0, afterMs),
+        cb
+      };
+    }
+
+    function finishLoopResumeIfReady(t, completedAnim) {
+      const request = loopResumeRequest;
+      if (!request || request.anim !== completedAnim || curAnim !== completedAnim || t < request.earliestAt) return;
+      loopResumeRequest = null;
+      request.cb?.();
     }
 
     function getAnimLoopMs(name) {
       const a = ANIMS[name];
       if (!a) return 1200;
       return Math.max(400, a.frames * a.speed);
+    }
+
+    function canPassiveRest() {
+      return !manualSleep && !followingMouse && state !== 'sleeping' && state !== 'overtired' && state !== 'waking';
+    }
+
+    function passiveRestMs(s = sleepiness()) {
+      return 24000 + s * 70000 + Math.random() * (22000 + s * 20000);
+    }
+
+    function finishPassiveRest() {
+      if (!canPassiveRest()) return;
+      const s = sleepiness();
+      const stayDownChance = state === 'sleepy' ? 0.82 : state === 'drowsy' ? 0.58 : 0.28 + s * 0.42;
+      if (Math.random() < stayDownChance) {
+        startPassiveRest(passiveRestMs(s) * (0.65 + Math.random() * 0.35));
+        return;
+      }
+      play('sleepy', () => {
+        if (!canPassiveRest()) return;
+        play(defaultIdle());
+        scheduleCycleAnim();
+      });
+    }
+
+    function startPassiveRest(restMs = passiveRestMs()) {
+      clearAwakeAnimTimer();
+      clearTimeout(idleTimer);
+      if (!canPassiveRest()) return;
+      play('laydown', () => {
+        if (!canPassiveRest()) return;
+        play('sleep');
+        resumeAtCurrentLoopEnd(restMs, finishPassiveRest);
+      });
     }
 
     function playAwakeAnimBurst(name) {
@@ -1355,12 +1410,11 @@
       const maxMs = CAPPED_AWAKE_ANIMS.has(name) ? AWAKE_ANIM_MAX_MS : Math.max(AWAKE_ANIM_MAX_MS, Math.round(loopMs * 3.5));
       const holdMs = Math.max(minMs, Math.min(maxMs, rawMs));
 
-      awakeAnimTimer = setTimeout(() => {
-        awakeAnimTimer = null;
+      resumeAtCurrentLoopEnd(holdMs, () => {
         if ((state !== 'awake' && state !== 'drowsy') || manualSleep || followingMouse) return;
         play(defaultIdle());
         scheduleCycleAnim();
-      }, holdMs);
+      });
     }
 
     function randomAwakeAnim() {
@@ -1398,29 +1452,16 @@
 
       const s = sleepiness();
       // When very sleepy, barely get up at all
-      const delay = s > 0.5 ? 2000 + Math.random() * 3000 : 4000 + Math.random() * 8000;
+      const delay = s > 0.5 ? 1800 + Math.random() * 2600 : 2800 + Math.random() * 6200;
 
       idleTimer = setTimeout(() => {
         if (state === 'sleeping' || manualSleep || followingMouse) return;
 
-        // Lie down probability: aggressive — at s=0.5 already 80%, at s=1 → 97%
-        const lieDownChance = 0.15 + s * 0.82;
+        const stateRestBoost = state === 'sleepy' ? 0.42 : state === 'drowsy' ? 0.22 : 0;
+        const lieDownChance = Math.min(0.96, 0.38 + s * 0.48 + stateRestBoost);
 
         if (Math.random() < lieDownChance) {
-          play('laydown', () => {
-            // Stay down much longer when sleepy: 15-60s+ near bedtime
-            const restTime = Math.max(15000, 12000 + s * 50000 + Math.random() * 15000);
-            setTimeout(() => {
-              if (state === 'sleeping' || manualSleep || followingMouse) return;
-              // When very sleepy, often just stay lying down (re-laydown)
-              if (s > 0.6 && Math.random() < s * 0.8) {
-                play('laydown', () => scheduleCycleAnim());
-                return;
-              }
-              play(defaultIdle());
-              setTimeout(() => scheduleCycleAnim(), 10000 + Math.random() * 5000);
-            }, restTime);
-          });
+          startPassiveRest(passiveRestMs(s));
           return;
         }
 
@@ -1508,6 +1549,7 @@
     function goodnightCutscene() {
       manualSleep = true;
       clearTimeout(idleTimer);
+      clearAwakeAnimTimer();
       menuOpen = false;
       document.getElementById('menu').classList.remove('open');
 
@@ -1544,6 +1586,7 @@
 
     function wakeUp() {
       manualSleep = false;
+      clearAwakeAnimTimer();
       state = 'waking';
       play('excited', () => {
         state = 'awake';
@@ -1559,6 +1602,7 @@
     function setState(s) {
       if (s === state) return;
       state = s;
+      clearAwakeAnimTimer();
       notifyCatStateChanged();
       switch (s) {
         case 'awake':
@@ -1646,7 +1690,7 @@
       }
       if (!changed) return;
       if (!enabled) {
-        clickAnimEnd = 0;
+        clearLoopResumeRequest();
         catFlip = false;
         // Re-evaluate the correct state so we resume the right animation
         // (e.g. sick if overtired) instead of unconditionally playing idle.
@@ -1721,7 +1765,7 @@
     function keepFollowExcited() {
       if (!followingMouse) return;
       clearTimeout(idleTimer);
-      clickAnimEnd = 0;
+      clearAwakeAnimTimer();
       if (curAnim !== 'excited') {
         play('excited');
       }
@@ -3690,7 +3734,6 @@
 
     // Single click = random animation, double click = menu
     let clickTimer = null;
-    let clickAnimEnd = 0; // timestamp when click animation should end
     let forceDeadClick = false;
 
     function onCatClick() {
@@ -3709,9 +3752,9 @@
           const randomAnims = ['dead', 'excited', 'waiting', 'surprised', 'idle2', 'dance', 'lick', 'shy', 'refuse', 'despite'];
           const pick = forceDeadClick ? 'dead' : randomAnims[Math.floor(Math.random() * randomAnims.length)];
           clearTimeout(idleTimer);
+          clearAwakeAnimTimer();
           play(pick);
-          // Set a deadline — tick() will auto-return to idle after this
-          clickAnimEnd = performance.now() + 5000;
+          resumeAtCurrentLoopEnd(5000, resumeFromTemporaryAnimation);
         }, 250);
       }
     }
@@ -4022,7 +4065,7 @@
           document.getElementById('bubble').classList.remove('show');
           ctx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
           visitorWrap.classList.remove('show');
-          visitorCtx.clearRect(0, 0, CAT_STAGE_W, CAT_STAGE_H);
+          visitorCtx.clearRect(0, 0, VISITOR_STAGE_W, VISITOR_STAGE_H);
           visitorState = null;
         }
       });
